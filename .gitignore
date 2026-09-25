@@ -1,6 +1,10 @@
 # Respaldos de la base de datos.
-# Contiene datos reales del negocio (productos, ventas, clientes): NO se suben.
-datos/
+# Todo lo que esté acá se IGNORA, menos la carpeta ejemplo/.
+# Motivo: los respaldos automáticos contienen datos reales del negocio
+# (productos, costos de compra, márgenes, ventas, proveedores).
+# Subirlos a un repositorio público los deja expuestos de forma permanente.
+datos/*
+!datos/ejemplo/
 
 # Archivos de diagnostico y pruebas locales
 _diag.php

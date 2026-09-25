@@ -1,0 +1,41 @@
+ESTE ARCHIVO SE SUBE A GIT — EL RESTO DE datos/ NO
+====================================================
+
+
+QUÉ HAY ACÁ
+-----------
+    datos-kiosco-ejemplo.sql   Volcado de la base con datos de PRUEBA:
+                              productos de ejemplo, costo y margen,
+                              medios de pago, proveedor ficticio.
+
+    Lo genera respaldar-ejemplo.bat (doble clic).
+
+
+POR QUÉ SOLO ESTA SUBCARPETA
+----------------------------
+El .gitignore del proyecto tiene:
+
+    datos/*
+    !datos/ejemplo/
+
+Todo lo demás en datos/ — los respaldos automáticos y los que descargas
+desde "Ajustes > Respaldos" — queda ignorado a propósito.
+
+Un respaldo real contiene tus costos de compra, tus márgenes, tus precios
+y el detalle de tus ventas. En un repositorio público eso queda expuesto
+de forma permanente: el historial de git no se borra de verdad.
+
+
+SI LE METISTE DATOS REALES POR ERROR
+-------------------------------------
+1) Sacalos del commit:
+       git rm -r --cached datos
+       git commit -m "deja de versionar respaldos"
+
+2) Pedile a GitHub que purgue el historial:
+       Settings > Security > Sensitive data removal
+
+3) Regenerá este archivo cuando la base vuelva a estar vacía:
+       doble clic en respaldar-ejemplo.bat
+
+El script te avisa si encuentra ventas en la base antes de escribir.

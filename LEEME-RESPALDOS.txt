@@ -1,0 +1,56 @@
+CARPETA DE RESPALDOS — LEÉME ANTES DE SUBIR NADA A GIT
+========================================================
+
+
+1. ¿QUÉ HAY ACÁ?
+---------------
+
+    respaldo_*.sql      Respaldos AUTOMÁTICOS que crea el sistema antes de
+                        cada borrado, y los que descargas desde
+                        "Ajustes > Respaldos".
+
+    ejemplo/            El único respaldo que se sube a git. Datos de
+                        prueba, sin información real del negocio.
+
+
+2. POR QUÉ ESTÁ BLOQUEADA ESTA CARPETA
+--------------------------------------
+
+El archivo .gitignore tiene:
+
+    datos/*
+    !datos/ejemplo/
+
+Eso ignora TODO lo que esté en esta carpeta, menos la subcarpeta ejemplo/.
+
+Motivo: un respaldo real contiene tus costos de compra, márgenes, precios
+de venta, nombres de proveedores y el detalle de todas tus ventas. Si eso
+se sube a un repositorio público, queda expuesto de forma permanente: el
+historial de git no se puede borrar de verdad, queda en las caches y en
+las copias que haga la gente.
+
+
+3. QUÉ HACER SI TE OLVIDÁS Y SUBISTE DATOS REALES
+--------------------------------------------------
+
+  a) Borralos del commit:
+         git rm -r --cached datos
+         git commit -m "deja de versionar respaldos"
+
+  b) Pedile a GitHub que purgue el historial:
+         Settings > Security > Sensitive data removal
+     (o escribile al soporte de GitHub pidiendo un "sensitive data removal")
+
+  c) Cambiá las contraseñas si llegó a haber alguna.
+
+Notá que el paso (b) tarda hasta 24 horas y hay un período de gracia
+indisponible para nuevas acciones. Mejor revisá antes de hacer commit.
+
+
+4. CÓMO SE GENERA EL RESPALDO DE EJEMPLO
+----------------------------------------
+
+    Doble clic en  respaldar-ejemplo.bat
+
+Verifica que la base NO tenga ventas reales antes de subirlo.
+El script te avisa si encuentra alguna.

@@ -51,18 +51,40 @@ Está en *Ajustes → Respaldos*, y también se crea solo antes de cualquier bor
 Para migrar a otra computadora: instalá Laragon, copiá la carpeta `kiosco` a `www`,
 ejecutá `instalar.php` una vez y restaurá el `.sql`.
 
+### Qué se sube a git y qué no
+
+| Carpeta | ¿En git? | Contenido |
+|---|---|---|
+| `datos/ejemplo/` | ✅ sí | Volcado con datos de **prueba** |
+| `datos/` (resto) | ❌ **nunca** | Respaldos reales: costos, márgenes, ventas, proveedores |
+
+El `.gitignore` bloquea `datos/*` y solo deja pasar `datos/ejemplo/`. Es a propósito:
+un respaldo real contiene tu información de negocio, y en un repositorio público
+queda expuesta de forma permanente (el historial de git no se borra de verdad).
+
+Para regenerar el respaldo de ejemplo, doble clic en **`respaldar-ejemplo.bat`**.
+El script te avisa si encuentra ventas en la base antes de escribir nada.
+
+Si alguna vez subiste un respaldo real por error, el procedimiento para limpiarlo
+está en **`LEEME-RESPALDOS.txt`**.
+
 ## Estructura
 
 ```
 kiosco/
-├── index.php      Interfaz del punto de venta
-├── api.php        API JSON (productos, ventas, reportes, kardex)
-├── config.php     Conexión a la base, respaldos y utilidades
-├── instalar.php   Crea la base y las tablas
-├── respaldo.php   Descarga y restauracion de respaldos
-├── estilos.css    Hoja de estilos
-├── app.js         Lógica de la interfaz
-└── datos/         Respaldos .sql (no se versiona)
+├── index.php              Interfaz del punto de venta
+├── api.php                API JSON (productos, ventas, reportes, kardex)
+├── config.php             Conexión a la base, respaldos y utilidades
+├── instalar.php           Crea la base y las tablas
+├── respaldo.php           Descarga y restauracion de respaldos
+├── respaldar-ejemplo.bat  Genera el respaldo de datos de prueba
+├── respaldar-ejemplo.php  (el script que llama el .bat)
+├── estilos.css            Hoja de estilos
+├── app.js                 Lógica de la interfaz
+├── LEEME-RESPALDOS.txt    Qué se sube a git y qué no
+└── datos/
+    ├── ejemplo/           Volcado de prueba (se versiona)
+    └── respaldo_*.sql     Respaldos reales (ignorados por git)
 ```
 
 ## Base de datos
