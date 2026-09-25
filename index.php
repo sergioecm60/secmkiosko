@@ -98,10 +98,12 @@ $cfg = leerConfig();
                 <th style="width:58px"></th>
                 <th>Producto</th>
                 <th style="width:130px">Código</th>
-                <th style="width:120px">Categoría</th>
+                <th style="width:130px">Categoría</th>
                 <th class="num" style="width:100px">Precio</th>
-                <th class="num" style="width:95px">Stock</th>
-                <th class="num" style="width:90px">Mínimo</th>
+                <th class="num" style="width:95px">Costo</th>
+                <th class="num" style="width:80px">Margen</th>
+                <th class="num" style="width:90px">Stock</th>
+                <th class="num" style="width:80px">Mínimo</th>
                 <th style="width:110px">Estado</th>
                 <th class="acciones" style="width:180px">Acciones</th>
               </tr>
@@ -266,6 +268,32 @@ $cfg = leerConfig();
         </div>
       </div>
 
+      <div class="card">
+        <div class="card-cab">
+          <h2>💳 Medios de pago</h2>
+          <button class="btn sm pri" id="btn-mp-nuevo">+ Agregar</button>
+        </div>
+        <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
+          <table class="tabla">
+            <thead><tr><th style="width:44px"></th><th>Método</th><th style="width:110px">Referencia</th><th style="width:90px">Estado</th><th class="acciones" style="width:120px"></th></tr></thead>
+            <tbody id="a-mp-tb"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-cab">
+          <h2>🚚 Proveedores</h2>
+          <button class="btn sm pri" id="btn-prov-nuevo">+ Agregar</button>
+        </div>
+        <div class="envoltura" style="box-shadow:none;border:0;border-radius:0; max-height:280px; overflow:auto">
+          <table class="tabla">
+            <thead><tr><th>Proveedor</th><th>Teléfono</th><th class="num" style="width:90px">Artículos</th><th class="acciones" style="width:120px"></th></tr></thead>
+            <tbody id="a-prov-tb"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" style="border-color:var(--bad)">
         <div class="card-cab" style="border-color:var(--bad)"><h2 style="color:var(--bad)">⚠️ Zona de peligro</h2></div>
         <div class="card-cue">
@@ -348,6 +376,7 @@ $cfg = leerConfig();
           <div class="campo"><label>Categoría</label><input id="mp-categoria" maxlength="25" list="lista-cat"></div>
           <datalist id="lista-cat"></datalist>
           <div class="campo"><label>Precio de venta *</label><input id="mp-precio" type="number" step="0.01" min="0"></div>
+          <div class="campo"><label>Precio de costo</label><input id="mp-costo" type="number" step="0.01" min="0" placeholder="0.00"></div>
           <div class="campo"><label>Stock actual</label><input id="mp-stock" type="number" step="0.01"></div>
           <div class="campo"><label>Stock mínimo (alerta)</label><input id="mp-minimo" type="number" step="0.01" min="0"></div>
           <div class="campo"><label>Unidad</label>
@@ -355,6 +384,18 @@ $cfg = leerConfig();
               <option>pieza</option><option>paquete</option><option>lata</option>
               <option>botella</option><option>caja</option><option>kg</option><option>litro</option>
             </select>
+          </div>
+          <div class="campo"><label>Proveedor</label>
+            <select id="mp-proveedor"><option value="0">— sin proveedor —</option></select>
+          </div>
+          <div class="campo" style="grid-column:1/-1">
+            <label>Observaciones</label>
+            <input id="mp-observaciones" maxlength="200" placeholder="Notas internas: cambios de envase, etc.">
+          </div>
+          <div class="campo" style="grid-column:1/-1">
+            <div class="aviso-linea" id="mp-margen" style="display:none">
+              <span>Margen por unidad</span><span id="mp-margen-valor"><b>—</b></span>
+            </div>
           </div>
         </div>
       </div>
@@ -389,6 +430,14 @@ $cfg = leerConfig();
           <div class="campo"><label>Cantidad</label><input id="ms-cant" type="number" step="0.01" min="0"></div>
           <div class="campo"><label>Motivo</label><input id="ms-motivo" maxlength="60" placeholder="Compra, merma, conteo…"></div>
         </div>
+        <div class="rejilla" style="margin-top:13px" id="ms-compra">
+          <div class="campo"><label>Proveedor</label>
+            <select id="ms-proveedor"><option value="0">— sin proveedor —</option></select>
+          </div>
+          <div class="campo"><label>N.º de remito / factura</label><input id="ms-documento" maxlength="40" placeholder="REM-0000-0000"></div>
+          <div class="campo"><label>Costo unitario nuevo</label><input id="ms-costo" type="number" step="0.01" min="0" placeholder="dejar 0 = no cambiar"></div>
+        </div>
+        <p class="parrafo" id="ms-ayuda" style="margin:12px 0 0;font-size:12.5px"></p>
       </div>
     </div>
     <div class="modal-pie">

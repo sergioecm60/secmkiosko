@@ -126,7 +126,11 @@ const estado = {
   fotoTmp: "",
   metodoCobro: "Efectivo",
   recibido: "",
-  ultimaVenta: null
+  ultimaVenta: null,
+  mediosPago: [{ id: 1, nombre: "Efectivo", icono: "💵", referencia: false }],
+  proveedores: [],
+  editMedioId: null,
+  editProvId: null
 };
 
 const prodPorId = (id) => estado.productos.find(p => p.id === Number(id)) || null;
@@ -317,11 +321,19 @@ function renderPOS() {
 function abrirCobro() {
   if (!estado.carrito.length) { aviso("El ticket está vacío.", "aviso-w"); return; }
   const tot = totalCarrito();
-  estado.metodoCobro = "Efectivo";
+  const metodos = estado.mediosPago.length
+    ? estado.mediosPago
+    : [{ id: 0, nombre: "Efectivo", icono: "💵", referencia: false }];
+  if (!metodos.some(m => m.nombre === estado.metodoCobro)) estado.metodoCobro = metodos[0].nombre;
   estado.recibido = "";
 
+  // Los botones de metodo se generan desde la tabla medios_pago
+  $("#cob-metodos").style.gridTemplateColumns = "repeat(" + Math.min(metodos.length, 3) + ",1fr)";
+  $("#cob-metodos").innerHTML = metodos.map(m =>
+    '<button class="metodo' + (m.nombre === estado.metodoCobro ? " on" : "") + '" data-m="' + esc(m.nombre) + '">'
+    + '<span class="ic">' + esc(m.icono) + "</span>" + esc(m.nombre) + "</button>").join("");
+
   $("#cob-total").textContent = dinero(tot);
-  $$("#cob-metodos .metodo").forEach(b => b.classList.toggle("on", b.dataset.m === "Efectivo"));
   $("#cob-ref").value = "";
   refrescarCobro();
 
@@ -338,12 +350,11 @@ function abrirCobro() {
 
 function refrescarCobro() {
   const tot = totalCarrito();
-  const efectivo = estado.metodoCobro === "Efectivo";
+  const metodo = estado.mediosPago.find(m => m.nombre === estado.metodoCobro);
+  const efectivo = metodo ? !!metodo.efectivo : true;
   $("#cob-efectivo").style.display = efectivo ? "" : "none";
   $("#cob-otro").style.display = efectivo ? "none" : "";
-  $("#cob-billetes").style.display = efectivo ? "" : "none";
-  $("#cob-teclado").style.display = efectivo ? "" : "none";
-  if (!efectivo) return;
+  if (!efectivo) { $("#cob-confirmar").disabled = false; return; }
 
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
   const dif = r2(recibido - tot);
@@ -375,7 +386,8 @@ async function confirmarVenta() {
   btn.disabled = true;
   btn.textContent = "Guardando…";
 
-  const efectivo = estado.metodoCobro === "Efectivo";
+  const metodo = estado.mediosPago.find(m => m.nombre === estado.metodoCobro);
+  const efectivo = metodo ? !!metodo.efectivo : true;
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
 
   try {
@@ -422,7 +434,7 @@ function renderProductos() {
   $("#p-count").textContent = estado.productos.length;
 
   if (!lista.length) {
-    tb.innerHTML = '<tr><td colspan="9"><div class="vacio" style="padding:34px">'
+    tb.innerHTML = '<tr><td colspan="11"><div class="vacio" style="padding:34px">'
       + '<div class="ico">' + (estado.productos.length ? "🔍" : "📦") + "</div>"
       + "<h3>" + (estado.productos.length ? "Ningún producto coincide" : "El catálogo está vacío") + "</h3>"
       + "<p>" + (estado.productos.length ? "Prueba con otro texto." : "Crea tu primer producto o importa un CSV.") + "</p>"
@@ -437,14 +449,22 @@ function renderProductos() {
 
   tb.innerHTML = lista.map(p => {
     const e = estadoStock(p);
+    const margen = p.margen;
+    const etqMargen = p.costo > 0
+      ? (margen < 0 ? "mal" : (margen < 15 ? "aviso" : "ok"))
+      : "neutro";
     return `<tr>
       <td>${fotoHTML(p, "avatar")}</td>
-      <td><strong>${esc(p.nombre)}</strong>${p.activo ? "" : ' <span class="etq neutro">inactivo</span>'}</td>
+      <td><strong>${esc(p.nombre)}</strong>${p.activo ? "" : ' <span class="etq neutro">inactivo</span>'}
+        ${p.proveedor ? '<br><span class="fuente" style="font-size:11.5px">🚚 ' + esc(p.proveedor) + "</span>" : ""}
+        ${p.observaciones ? '<br><span class="fuente" style="font-size:11.5px" title="' + esc(p.observaciones) + '">📝 ' + esc(p.observaciones.slice(0, 40)) + (p.observaciones.length > 40 ? "…" : "") + "</span>" : ""}</td>
       <td class="fuente">${p.codigo ? esc(p.codigo) : "—"}</td>
       <td>${p.categoria ? esc(p.categoria) : "—"}</td>
       <td class="num">${dinero(p.precio)}</td>
+      <td class="num fuente">${p.costo > 0 ? dinero(p.costo) : "—"}</td>
+      <td class="num"><span class="etq ${etqMargen}">${p.costo > 0 ? numeroLocal(margen, 1) + "%" : "—"}</span></td>
       <td class="num"><strong>${numeroLocal(p.stock, 0)}</strong> <span class="fuente">${esc(p.unidad || "")}</span></td>
-      <td class="num fuente">${p.minimo > 0 ? numeroLocal(p.minimo, 0) : "—"}</td>
+      <td>${p.minimo > 0 ? numeroLocal(p.minimo, 0) : "—"}</td>
       <td><span class="etq ${e.clase}">${e.texto}</span></td>
       <td class="acciones">
         <button class="btn sm" data-editar="${p.id}" title="Editar">✎</button>
@@ -453,6 +473,42 @@ function renderProductos() {
       </td>
     </tr>`;
   }).join("");
+}
+
+/** Rellena el selector de proveedores del modal de producto. */
+function llenarProveedores(seleccionado) {
+  const sel = $("#mp-proveedor");
+  if (!sel) return;
+  sel.innerHTML = '<option value="0">— sin proveedor —</option>'
+    + estado.proveedores.filter(p => p.activo).map(p =>
+        '<option value="' + p.id + '"' + (String(p.id) === String(seleccionado || 0) ? " selected" : "") + ">"
+        + esc(p.nombre) + "</option>").join("");
+  sel.value = String(seleccionado || 0);
+}
+
+/** Calcula y muestra el margen mientras se escribe precio y costo. */
+function refrescarMargen() {
+  const precio = Number($("#mp-precio").value) || 0;
+  const costo = Number($("#mp-costo").value) || 0;
+  const caja = $("#mp-margen");
+  if (!caja) return;
+  if (precio <= 0) { caja.style.display = "none"; return; }
+  caja.style.display = "";
+  const utilidad = r2(precio - costo);
+  const pct = r2((utilidad / precio) * 100);
+  let color = "var(--ok)", texto = "";
+  if (costo <= 0) {
+    color = "var(--muted)";
+    texto = "<b>" + dinero(precio) + "</b> <span class='fuente'>(sin costo cargado)</span>";
+  } else if (pct < 0) {
+    color = "var(--bad)";
+    texto = "<b style='color:" + color + "'>" + dinero(utilidad) + " · " + numeroLocal(pct, 1) + "%</b> <span class='fuente'>— vendés a pérdida</span>";
+  } else {
+    if (pct < 15) color = "var(--warn)";
+    texto = "<b style='color:" + color + "'>" + dinero(utilidad) + " · " + numeroLocal(pct, 1) + "%</b>"
+      + " <span class='fuente'>por unidad</span>";
+  }
+  $("#mp-margen-valor").innerHTML = texto;
 }
 
 async function abrirProducto(id) {
@@ -467,24 +523,31 @@ async function abrirProducto(id) {
     $("#mp-codigo").value = p.codigo || "";
     $("#mp-categoria").value = p.categoria || "";
     $("#mp-precio").value = p.precio;
+    $("#mp-costo").value = p.costo || 0;
     $("#mp-stock").value = p.stock;
     $("#mp-minimo").value = p.minimo;
     $("#mp-unidad").value = p.unidad || "pieza";
+    $("#mp-observaciones").value = p.observaciones || "";
+    llenarProveedores(p.proveedor_id);
     estado.fotoTmp = p.foto || "";
     $("#mp-foto").innerHTML = estado.fotoTmp
       ? '<img src="' + esc(estado.fotoTmp) + '" alt="">'
       : emoji({ categoria: p.categoria });
     $("#mp-borrar").style.display = "";
+    refrescarMargen();
     await cargarKardex(id);
   } else {
     $("#mp-titulo").textContent = "Nuevo producto";
-    ["#mp-nombre", "#mp-codigo", "#mp-categoria", "#mp-precio", "#mp-minimo"].forEach(s => { $(s).value = ""; });
+    ["#mp-nombre", "#mp-codigo", "#mp-categoria", "#mp-precio", "#mp-costo",
+     "#mp-minimo", "#mp-observaciones"].forEach(s => { $(s).value = ""; });
     $("#mp-stock").value = 0;
     $("#mp-unidad").value = "pieza";
+    llenarProveedores(0);
     estado.fotoTmp = "";
     $("#mp-foto").innerHTML = "📦";
     $("#mp-borrar").style.display = "none";
     $("#mp-kardex").style.display = "none";
+    refrescarMargen();
   }
   abrirModal("#m-prod");
   setTimeout(() => $("#mp-nombre").focus(), 120);
@@ -515,13 +578,23 @@ async function guardarProducto() {
     codigo: $("#mp-codigo").value.trim(),
     categoria: $("#mp-categoria").value.trim(),
     precio: Number($("#mp-precio").value) || 0,
+    costo: Number($("#mp-costo").value) || 0,
     stock: Number($("#mp-stock").value) || 0,
     minimo: Number($("#mp-minimo").value) || 0,
     unidad: $("#mp-unidad").value,
     foto: estado.fotoTmp,
+    observaciones: $("#mp-observaciones").value.trim(),
+    proveedor_id: Number($("#mp-proveedor").value) || 0,
     activo: 1
   };
   if (!datos.nombre) { aviso("Escribe el nombre del producto.", "aviso-w"); $("#mp-nombre").focus(); return; }
+  if (datos.precio <= 0) { aviso("El precio de venta debe ser mayor que cero.", "aviso-w"); $("#mp-precio").focus(); return; }
+  if (datos.costo > datos.precio) {
+    const ok = await confirmar("Costo mayor que el precio",
+      "El costo (" + dinero(datos.costo) + ") es mayor que el precio de venta (" + dinero(datos.precio) +
+      "). Cada venta de este producto te daría pérdida. ¿Guardar igual?");
+    if (!ok) { $("#mp-costo").focus(); return; }
+  }
 
   try {
     await api("producto_guardar", datos);
@@ -585,16 +658,34 @@ let stockSel = null;
 
 function abrirStock(tipo) {
   stockSel = null;
-  $("#ms-titulo").textContent = tipo === "salida" ? "📤 Salida de mercancía" : "📥 Entrada de mercancía";
+  const entrada = tipo !== "salida";
+  $("#ms-titulo").textContent = entrada ? "📥 Entrada de mercancía" : "📤 Salida de mercancía";
   $("#ms-buscar").value = "";
   $("#ms-lista").innerHTML = "";
   $("#ms-form").style.display = "none";
   $("#ms-guardar").disabled = true;
   $("#ms-cant").value = 1;
-  $("#ms-motivo").value = tipo === "salida" ? "Merma" : "Compra a proveedor";
+  $("#ms-motivo").value = entrada ? "Compra a proveedor" : "Merma";
+  $("#ms-documento").value = "";
+  $("#ms-costo").value = 0;
   $("#ms-guardar").dataset.tipo = tipo;
+  $("#ms-compra").style.display = entrada ? "" : "none";
+  $("#ms-ayuda").textContent = entrada
+    ? "Registrá el proveedor y el número de remito para saber de dónde salió cada mercadería. Si cargás un costo unitario nuevo, se actualiza el margen del producto."
+    : "Las salidas no cambian el costo del producto: solo descuentan existencias.";
+  llenarProveedoresStock(0);
   abrirModal("#m-stock");
   setTimeout(() => $("#ms-buscar").focus(), 120);
+}
+
+function llenarProveedoresStock(seleccionado) {
+  const sel = $("#ms-proveedor");
+  if (!sel) return;
+  sel.innerHTML = '<option value="0">— sin proveedor —</option>'
+    + estado.proveedores.filter(p => p.activo).map(p =>
+        '<option value="' + p.id + '"' + (String(p.id) === String(seleccionado || 0) ? " selected" : "") + ">"
+        + esc(p.nombre) + "</option>").join("");
+  sel.value = String(seleccionado || 0);
 }
 
 function filtrarStock() {
@@ -617,8 +708,11 @@ function elegirStock(id) {
   $("#ms-lista").innerHTML = "";
   $("#ms-buscar").value = stockSel.nombre;
   $("#ms-form").style.display = "";
-  $("#ms-info").innerHTML = "<span>" + esc(stockSel.nombre) + "</span><span class=\"etq neutro\">"
-    + numeroLocal(stockSel.stock, 0) + " " + esc(stockSel.unidad || "") + " en existencia</span>";
+  const extra = stockSel.costo > 0
+    ? '<span class="etq neutro">costo ' + dinero(stockSel.costo) + " · margen " + numeroLocal(stockSel.margen, 1) + "%</span>"
+    : '<span class="etq aviso">sin costo cargado</span>';
+  $("#ms-info").innerHTML = "<span>" + esc(stockSel.nombre) + "</span>"
+    + '<span class="etq neutro">' + numeroLocal(stockSel.stock, 0) + " " + esc(stockSel.unidad || "") + " en existencia</span> " + extra;
   $("#ms-guardar").disabled = false;
   $("#ms-cant").focus();
   $("#ms-cant").select();
@@ -628,13 +722,25 @@ async function guardarStock() {
   if (!stockSel) return;
   const cant = Number($("#ms-cant").value) || 0;
   if (cant <= 0) { aviso("La cantidad debe ser mayor que cero.", "aviso-w"); return; }
+  const tipo = $("#ms-guardar").dataset.tipo;
+  const cuerpo = {
+    id: stockSel.id, tipo: tipo,
+    cantidad: cant, referencia: $("#ms-motivo").value.trim()
+  };
+  if (tipo !== "salida") {
+    cuerpo.proveedor_id = Number($("#ms-proveedor").value) || 0;
+    cuerpo.documento = $("#ms-documento").value.trim();
+    const costo = Number($("#ms-costo").value) || 0;
+    if (costo > 0) cuerpo.costo_unitario = costo;
+  }
   try {
-    const r = await api("stock_mover", {
-      id: stockSel.id, tipo: $("#ms-guardar").dataset.tipo,
-      cantidad: cant, referencia: $("#ms-motivo").value.trim()
-    });
+    const r = await api("stock_mover", cuerpo);
     cerrarModal("#m-stock");
-    aviso("Movimiento registrado. Stock actual: " + numeroLocal(r.stock, 0), "ok");
+    let msg = "Movimiento registrado. Stock actual: " + numeroLocal(r.stock, 0);
+    if (r.costo > 0 && Number($("#ms-costo").value) > 0) {
+      msg += " · costo actualizado a " + dinero(r.costo);
+    }
+    aviso(msg, "ok");
     await cargarProductos();
     renderPOS();
     if (estado.vista === "productos") renderProductos();
@@ -829,10 +935,13 @@ async function renderReportes() {
         <div class="sub">${s.descuentos > 0 ? "descuentos: " + dinero(s.descuentos) : "sin descuentos"}</div></div>
       <div class="stat"><div class="cap">Ticket promedio</div><div class="val">${dinero(s.promedio)}</div>
         <div class="sub">mayor: ${dinero(s.mayor)}</div></div>
-      <div class="stat"><div class="cap">Valor del inventario</div><div class="val">${dinero(s.inventario)}</div>
-        <div class="sub">${numeroLocal(s.unidades, 0)} piezas en almacén</div></div>
+      <div class="stat"><div class="cap" style="color:var(--ok)">Ganancia bruta</div>
+        <div class="val" style="color:var(--ok)">${dinero(s.utilidad)}</div>
+        <div class="sub">costo de mercancía: ${dinero(s.costo)} · margen ${numeroLocal(s.margen, 1)}%</div></div>
+      <div class="stat"><div class="cap">Inventario a costo</div><div class="val">${dinero(s.costo_inventario)}</div>
+        <div class="sub">a venta: ${dinero(s.inventario)} · en anaquel: ${dinero(s.ganancia_potencial)}</div></div>
       <div class="stat"><div class="cap">Anuladas</div><div class="val" style="${s.anuladas ? "color:var(--bad)" : ""}">${numeroLocal(s.anuladas, 0)}</div>
-        <div class="sub">no cuentan en el total</div></div>`;
+        <div class="sub">${numeroLocal(s.unidades, 0)} piezas en almacén</div></div>`;
 
     // Gráfica por hora
     const horas = r.por_hora;
@@ -855,7 +964,8 @@ async function renderReportes() {
         <td class="fuente">${i < 3 ? ["🥇", "🥈", "🥉"][i] : (i + 1)}</td>
         <td>${esc(t.nombre)}</td>
         <td class="num">${numeroLocal(t.unidades, 0)}</td>
-        <td class="num">${dinero(t.vendido)}</td>
+        <td class="num">${dinero(t.vendido)}
+          <br><span class="fuente" style="font-size:11px">margen ${t.costo > 0 ? numeroLocal(t.margen, 1) + "%" : "—"}</span></td>
       </tr>`).join("")
       : '<tr><td colspan="4" style="padding:22px;text-align:center;color:var(--muted)">Sin ventas en el periodo</td></tr>';
 
@@ -902,6 +1012,128 @@ async function renderReportes() {
 /* =====================================================================
    12. AJUSTES
    ===================================================================== */
+
+/* --- Medios de pago --- */
+async function cargarMediosPago() {
+  try {
+    const r = await api("medios_pago", { todos: 1 });
+    estado.mediosTodos = r.medios;
+    const tb = $("#a-mp-tb");
+    if (!tb) return;
+    tb.innerHTML = r.medios.length ? r.medios.map(m => `
+      <tr>
+        <td style="font-size:19px">${esc(m.icono)}</td>
+        <td><strong>${esc(m.nombre)}</strong>${m.efectivo ? ' <span class="etq ok">recibe vuelto</span>' : ""}</td>
+        <td>${m.referencia ? '<span class="etq neutro">sí</span>' : '<span class="fuente">no</span>'}</td>
+        <td>${m.activo ? '<span class="etq ok">Activo</span>' : '<span class="etq neutro">Inactivo</span>'}</td>
+        <td class="acciones">
+          <button class="btn sm" data-mp-editar="${m.id}">✎</button>
+          <button class="btn sm peligro" data-mp-borrar="${m.id}">🗑</button>
+        </td>
+      </tr>`).join("")
+      : '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted)">Sin medios de pago</td></tr>';
+  } catch (e) { /* sin tabla */ }
+}
+
+async function guardarMedioPago(id) {
+  const nombre = id
+    ? (estado.mediosTodos.find(m => m.id === Number(id)) || {}).nombre
+    : await pedirTexto("Nuevo medio de pago", "Nombre", "Por ejemplo: Mercado Pago, Débito, Cobro móvil…", "", "text");
+  if (nombre === null) return;
+
+  if (id) {
+    const m = estado.mediosTodos.find(x => x.id === Number(id));
+    if (!m) return;
+    try {
+      await api("medio_pago_guardar", {
+        id: m.id, nombre: m.nombre, icono: m.icono,
+        referencia: m.referencia ? 1 : 0, efectivo: m.efectivo ? 1 : 0,
+        activo: m.activo ? 1 : 0, orden: 99
+      });
+      aviso("Medio de pago actualizado.", "ok");
+    } catch (e) { aviso(e.message, "mal"); return; }
+  } else {
+    if (!String(nombre).trim()) { aviso("Escribe el nombre.", "aviso-w"); return; }
+    const esEfec = await pedirSiNo("¿Recibe dinero en efectivo?", "Si dice sí, el sistema va a pedir el importe entregado y calculará el vuelto.");
+    if (esEfec === null) return;
+    const conRef = esEfec ? 0 : 1;
+    try {
+      await api("medio_pago_guardar", {
+        nombre: String(nombre).trim(), icono: esEfec ? "💵" : "💳",
+        referencia: conRef, efectivo: esEfec ? 1 : 0, activo: 1, orden: 99
+      });
+      aviso("Medio de pago agregado.", "ok");
+    } catch (e) { aviso(e.message, "mal"); return; }
+  }
+  await cargarMediosPago();
+  await refrescarCabecera();
+}
+
+/* --- Proveedores --- */
+async function cargarProveedores() {
+  try {
+    const r = await api("proveedores");
+    estado.proveedores = r.proveedores;
+    const tb = $("#a-prov-tb");
+    if (!tb) return;
+    tb.innerHTML = r.proveedores.length ? r.proveedores.map(p => `
+      <tr>
+        <td><strong>${esc(p.nombre)}</strong>${p.activo ? "" : ' <span class="etq neutro">inactivo</span>'}
+          ${p.observaciones ? '<br><span class="fuente" style="font-size:11.5px">' + esc(p.observaciones.slice(0, 40)) + "</span>" : ""}</td>
+        <td class="fuente">${p.telefono ? esc(p.telefono) : "—"}</td>
+        <td class="num">${p.articulos}</td>
+        <td class="acciones">
+          <button class="btn sm" data-prov-editar="${p.id}">✎</button>
+          <button class="btn sm peligro" data-prov-borrar="${p.id}">🗑</button>
+        </td>
+      </tr>`).join("")
+      : '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--muted)">Sin proveedores cargados</td></tr>';
+  } catch (e) { /* sin tabla */ }
+}
+
+async function guardarProveedor(id) {
+  if (id) {
+    const p = estado.proveedores.find(x => x.id === Number(id));
+    if (!p) return;
+    const nombre = await pedirTexto("Editar proveedor", "Nombre", "", p.nombre, "text");
+    if (nombre === null) return;
+    try {
+      await api("proveedor_guardar", {
+        id: p.id, nombre: String(nombre).trim() || p.nombre,
+        telefono: p.telefono, email: p.email, observaciones: p.observaciones,
+        activo: p.activo ? 1 : 0
+      });
+      aviso("Proveedor actualizado.", "ok");
+    } catch (e) { aviso(e.message, "mal"); return; }
+  } else {
+    const nombre = await pedirTexto("Nuevo proveedor", "Nombre del proveedor", "Ej: Distribuidora del Sur", "", "text");
+    if (nombre === null) return;
+    if (!String(nombre).trim()) { aviso("Escribe el nombre.", "aviso-w"); return; }
+    const tel = await pedirTexto("Teléfono (opcional)", "Teléfono", "Podés dejarlo vacío", "", "text");
+    if (tel === null) return;
+    try {
+      await api("proveedor_guardar", { nombre: String(nombre).trim(), telefono: String(tel || "").trim() });
+      aviso("Proveedor agregado.", "ok");
+    } catch (e) { aviso(e.message, "mal"); return; }
+  }
+  await cargarProveedores();
+}
+
+async function borrarProveedor(id) {
+  const p = estado.proveedores.find(x => x.id === Number(id));
+  if (!p) return;
+  const ok = await confirmar("Eliminar proveedor",
+    "Se quitará «" + p.nombre + "» de la lista. Los " + p.articulos +
+    " producto(s) que tiene asignados quedarán sin proveedor, pero no se borra nada del catálogo.");
+  if (!ok) return;
+  try {
+    const r = await api("proveedor_borrar", { id });
+    aviso("Proveedor eliminado. " + r.desasignados + " producto(s) quedaron sin proveedor.", "ok");
+    await cargarProveedores();
+    await cargarProductos();
+  } catch (e) { aviso(e.message, "mal"); }
+}
+
 async function renderAjustes() {
   const c = estado.config;
   $("#c-negocio").value = c.negocio || "";
@@ -911,6 +1143,8 @@ async function renderAjustes() {
   $("#c-pie").value = c.pie || "";
   $("#c-logo").value = c.logo || "K";
   $("#c-folio").value = c.folio || 1;
+
+  await Promise.all([cargarMediosPago(), cargarProveedores()]);
 
   try {
     const r = await api("estado");
@@ -1055,17 +1289,17 @@ function confirmar(titulo, texto) {
   });
 }
 
-/* Modal de captura rápida (descuento, etc.) */
+/* Modal de captura rápida: texto, número o sí/no */
 let alRapida = null;
-function pedirValor(titulo, rotulo, ayuda, valorInicial, tipo) {
+function pedirDato(titulo, rotulo, ayuda, valorInicial, tipo) {
   return new Promise(resolve => {
     $("#mr-titulo").textContent = titulo;
     $("#mr-rotulo").textContent = rotulo;
     $("#mr-ayuda").textContent = ayuda || "";
     const inp = $("#mr-valor");
     inp.value = valorInicial != null ? valorInicial : "";
-    inp.type = tipo || "number";
-    inp.step = "0.01";
+    inp.type = tipo || "text";
+    inp.step = inp.type === "number" ? "0.01" : "";
     $("#m-rapida").classList.add("on");
     alRapida = (ok) => {
       const v = inp.value;
@@ -1075,6 +1309,16 @@ function pedirValor(titulo, rotulo, ayuda, valorInicial, tipo) {
     };
     setTimeout(() => { inp.focus(); inp.select(); }, 120);
   });
+}
+
+const pedirTexto = (t, r, a, v) => pedirDato(t, r, a, v, "text");
+const pedirNumero = (t, r, a, v) => pedirDato(t, r, a, v, "number");
+
+/** Devuelve true (sí), false (no) o null (cancelado). */
+async function pedirSiNo(titulo, ayuda) {
+  const r = await pedirDato(titulo, "Sí / No", ayuda, "si", "text");
+  if (r === null) return null;
+  return /^(si|sí|s|1|true|yes)$/i.test(String(r).trim());
 }
 
 /* =====================================================================
@@ -1088,6 +1332,7 @@ async function cargarProductos() {
 async function refrescarCabecera() {
   const r = await api("estado");
   estado.config = r.config;
+  if (r.medios_pago && r.medios_pago.length) estado.mediosPago = r.medios_pago;
   aplicarMarca();
   $("#lbl-hoy-total").textContent = dinero(r.hoy.total);
   const d = new Date();
@@ -1197,7 +1442,7 @@ function conectar() {
 
   $("#fila-desc").addEventListener("click", async () => {
     const actual = estado.descuento;
-    const v = await pedirValor("Descuento", "Monto del descuento (0 para quitar)",
+    const v = await pedirNumero("Descuento", "Monto del descuento (0 para quitar)",
       "Se aplica al subtotal completo de la venta.", actual || "", "number");
     if (v === null) return;
     const n = Math.max(0, Number(v) || 0);
@@ -1313,6 +1558,40 @@ function conectar() {
 
   /* --- ajustes --- */
   $("#btn-c-guardar").addEventListener("click", guardarConfig);
+
+  /* --- medios de pago --- */
+  $("#btn-mp-nuevo").addEventListener("click", () => guardarMedioPago(0));
+  $("#a-mp-tb").addEventListener("click", e => {
+    const t = e.target;
+    if (t.dataset.mpEditar) guardarMedioPago(t.dataset.mpEditar);
+    else if (t.dataset.mpBorrar) {
+      const m = (estado.mediosTodos || []).find(x => x.id === Number(t.dataset.mpBorrar));
+      confirmar("Eliminar medio de pago",
+        "Se quitará «" + (m ? m.nombre : "") + "» de las opciones de cobro. Las ventas ya registradas lo conservan."
+      ).then(ok => {
+        if (!ok) return;
+        api("medio_pago_borrar", { id: t.dataset.mpBorrar })
+          .then(r => {
+            aviso(r.desactivado ? "Ese medio ya se usó en ventas: se desactivó en vez de borrarse." : "Medio de pago eliminado.",
+              r.desactivado ? "aviso-w" : "ok");
+            return Promise.all([cargarMediosPago(), refrescarCabecera()]);
+          })
+          .catch(err => aviso(err.message, "mal"));
+      });
+    }
+  });
+
+  /* --- proveedores --- */
+  $("#btn-prov-nuevo").addEventListener("click", () => guardarProveedor(0));
+  $("#a-prov-tb").addEventListener("click", e => {
+    const t = e.target;
+    if (t.dataset.provEditar) guardarProveedor(t.dataset.provEditar);
+    else if (t.dataset.provBorrar) borrarProveedor(t.dataset.provBorrar);
+  });
+
+  /* --- margen en vivo --- */
+  ["#mp-precio", "#mp-costo"].forEach(s => $(s).addEventListener("input", refrescarMargen));
+
   $$("[data-limpiar]").forEach(b => b.addEventListener("click", async () => {
     const que = b.dataset.limpiar;
     const textos = {
@@ -1394,7 +1673,7 @@ async function exportarVentas() {
 async function iniciar() {
   conectar();
   try {
-    await Promise.all([cargarProductos(), refrescarCabecera()]);
+    await Promise.all([cargarProductos(), refrescarCabecera(), cargarProveedores()]);
     if (estado.config.tema === "ocuro") document.body.classList.add("t.ocuro");
     aplicarMarca();
     renderPOS();

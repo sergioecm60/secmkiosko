@@ -90,12 +90,22 @@ function hasta(): string
 /** Convierte una fila de productos a los tipos que espera el navegador. */
 function prod(array $f): array
 {
+    $precio = (float) $f['precio'];
+    $costo  = (float) ($f['costo'] ?? 0);
+    $margen = ($precio > 0) ? (($precio - $costo) / $precio) * 100 : 0.0;
+
     return [
         'id'        => (int) $f['id'],
         'nombre'    => $f['nombre'],
         'codigo'    => $f['codigo'] ?? '',
         'categoria' => $f['categoria'] ?? '',
-        'precio'    => (float) $f['precio'],
+        'precio'    => $precio,
+        'costo'     => $costo,
+        'margen'    => redondear($margen),
+        'utilidad'  => redondear($precio - $costo),
+        'observaciones' => $f['observaciones'] ?? '',
+        'proveedor_id'   => isset($f['proveedor_id']) && $f['proveedor_id'] !== null ? (int) $f['proveedor_id'] : 0,
+        'proveedor'      => $f['proveedor'] ?? '',
         'stock'     => (float) $f['stock'],
         'minimo'    => (float) $f['minimo'],
         'unidad'    => $f['unidad'] ?: 'pieza',
@@ -103,6 +113,23 @@ function prod(array $f): array
         'activo'    => (int) $f['activo'] === 1,
         'creado'    => $f['creado'] ?? null,
     ];
+}
+
+/** Medios de pago activos, ordenados. */
+function mediosPago(bool $soloActivos = true): array
+{
+    $sql = 'SELECT `id`,`nombre`,`icono`,`exige_referencia`,`es_efectivo`,`orden` FROM `medios_pago`';
+    if ($soloActivos) {
+        $sql .= ' WHERE activo = 1';
+    }
+    $sql .= ' ORDER BY `orden`, `nombre`';
+    return array_map(fn($m) => [
+        'id'        => (int) $m['id'],
+        'nombre'    => $m['nombre'],
+        'icono'     => $m['icono'] ?: '💳',
+        'referencia' => (int) $m['exige_referencia'] === 1,
+        'efectivo'  => (int) $m['es_efectivo'] === 1,
+    ], pdoBd()->query($sql)->fetchAll());
 }
 
 function venta(array $f): array
@@ -149,8 +176,9 @@ try {
             $st = $bd->query('SELECT COUNT(*) AS n FROM productos WHERE activo = 1');
             $nProd = (int) $st->fetchColumn();
 
-            $st = $bd->query('SELECT COALESCE(SUM(stock * precio),0) AS v FROM productos WHERE activo = 1');
-            $valorInventario = (float) $st->fetchColumn();
+            $st = $bd->query('SELECT COALESCE(SUM(stock * precio),0) AS v, COALESCE(SUM(stock * costo),0) AS c
+                             FROM productos WHERE activo = 1');
+            $inv = $st->fetch();
 
             salida([
                 'ok'     => true,
@@ -160,7 +188,9 @@ try {
                     'total'  => (float) $hoyVenta['t'],
                 ],
                 'productos'          => $nProd,
-                'valor_inventario'   => redondear($valorInventario),
+                'valor_inventario'   => redondear((float) $inv['v']),
+                'costo_inventario'   => redondear((float) $inv['c']),
+                'medios_pago'        => mediosPago(),
                 'php_version'        => PHP_VERSION,
                 'mysql_version'      => (string) $bd->query('SELECT VERSION()')->fetchColumn(),
                 'servidor'           => $_SERVER['SERVER_SOFTWARE'] ?? 'desconocido',
@@ -175,21 +205,24 @@ try {
             $buscar = trim((string) p('buscar', ''));
             $cat    = trim((string) p('categoria', ''));
 
-            $sql = 'SELECT * FROM productos WHERE 1 = 1';
+            $sql = 'SELECT pr.*, pv.`nombre` AS proveedor
+                    FROM productos pr
+                    LEFT JOIN proveedores pv ON pv.id = pr.proveedor_id
+                    WHERE 1 = 1';
             $par = [];
             if ($soloActivos) {
-                $sql .= ' AND activo = 1';
+                $sql .= ' AND pr.activo = 1';
             }
             if ($buscar !== '') {
-                $sql .= ' AND (nombre LIKE ? OR codigo LIKE ? OR categoria LIKE ?)';
+                $sql .= ' AND (pr.nombre LIKE ? OR pr.codigo LIKE ? OR pr.categoria LIKE ?)';
                 $like = '%' . $buscar . '%';
                 array_push($par, $like, $like, $like);
             }
             if ($cat !== '') {
-                $sql .= ' AND categoria = ?';
+                $sql .= ' AND pr.categoria = ?';
                 $par[] = $cat;
             }
-            $sql .= ' ORDER BY nombre ASC';
+            $sql .= ' ORDER BY pr.nombre ASC';
 
             $st = $bd->prepare($sql);
             $st->execute($par);
@@ -200,7 +233,10 @@ try {
 
         case 'producto': {
             $id = pInt('id');
-            $st = $bd->prepare('SELECT * FROM productos WHERE id = ?');
+            $st = $bd->prepare('SELECT pr.*, pv.`nombre` AS proveedor
+                                FROM productos pr
+                                LEFT JOIN proveedores pv ON pv.id = pr.proveedor_id
+                                WHERE pr.id = ?');
             $st->execute([$id]);
             $f = $st->fetch();
             if (!$f) {
@@ -226,6 +262,9 @@ try {
             $unidad    = pTxt('unidad', 20) ?: 'pieza';
             $foto      = pTxt('foto', 400000);
             $activo    = ((string) p('activo', '1')) === '1' ? 1 : 0;
+            $costo     = p('costo') === null ? 0.0 : max(0, pNum('costo'));
+            $obs       = pTxt('observaciones', 500);
+            $provId    = pInt('proveedor_id', 0);
 
             // Codigo repetido
             if ($codigo !== '') {
@@ -253,17 +292,21 @@ try {
                     $minimo    = p('minimo') === null ? (float) $viejo['minimo'] : $minimo;
                     $activo    = p('activo') === null ? (int) $viejo['activo'] : $activo;
                     $foto      = p('foto') === null ? (string) $viejo['foto'] : $foto;
+                    $costo     = p('costo') === null ? (float) $viejo['costo'] : $costo;
+                    $obs       = p('observaciones') === null ? (string) $viejo['observaciones'] : $obs;
+                    $provId    = p('proveedor_id') === null ? (int) $viejo['proveedor_id'] : $provId;
                     $stockViejo = (float) $viejo['stock'];
                     $stockNuevo = $stockViejo;
                     if (p('stock') !== null) {
                         $stockNuevo = pNum('stock');
                     }
                     $st = $bd->prepare(
-                        'UPDATE productos SET nombre=?, codigo=?, categoria=?, precio=?, stock=?, minimo=?, unidad=?, foto=?, activo=?
+                        'UPDATE productos SET nombre=?, codigo=?, categoria=?, precio=?, costo=?, stock=?, minimo=?,
+                                             unidad=?, foto=?, activo=?, observaciones=?, proveedor_id=?
                          WHERE id = ?'
                     );
-                    $st->execute([$nombre, $codigo ?: null, $categoria ?: null, $precio, $stockNuevo,
-                                  $minimo, $unidad, $foto ?: null, $activo, $id]);
+                    $st->execute([$nombre, $codigo ?: null, $categoria ?: null, $precio, $costo, $stockNuevo,
+                                  $minimo, $unidad, $foto ?: null, $activo, $obs ?: null, $provId ?: null, $id]);
                     $dif = redondear($stockNuevo - $stockViejo);
                     if ($dif !== 0.0) {
                         registrarMovimiento([
@@ -276,11 +319,11 @@ try {
                 } else {
                     $stock = pNum('stock');
                     $st = $bd->prepare(
-                        'INSERT INTO productos (nombre,codigo,categoria,precio,stock,minimo,unidad,foto,activo)
-                         VALUES (?,?,?,?,?,?,?,?,?)'
+                        'INSERT INTO productos (nombre,codigo,categoria,precio,costo,stock,minimo,unidad,foto,activo,observaciones,proveedor_id)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
                     );
-                    $st->execute([$nombre, $codigo ?: null, $categoria ?: null, $precio, $stock,
-                                  $minimo, $unidad, $foto ?: null, $activo]);
+                    $st->execute([$nombre, $codigo ?: null, $categoria ?: null, $precio, $costo, $stock,
+                                  $minimo, $unidad, $foto ?: null, $activo, $obs ?: null, $provId ?: null]);
                     $id = (int) $bd->lastInsertId();
                     registrarMovimiento([
                         'tipo' => 'alta', 'producto_id' => $id, 'producto_nombre' => $nombre,
@@ -294,7 +337,9 @@ try {
                 throw $e;
             }
 
-            $st = $bd->prepare('SELECT * FROM productos WHERE id = ?');
+            $st = $bd->prepare('SELECT pr.*, pv.`nombre` AS proveedor
+                            FROM productos pr LEFT JOIN proveedores pv ON pv.id = pr.proveedor_id
+                            WHERE pr.id = ?');
             $st->execute([$id]);
             salida(['ok' => true, 'producto' => prod($st->fetch()), 'id' => $id]);
         }
@@ -331,6 +376,8 @@ try {
             $tipo = pTxt('tipo', 20);           // entrada | salida
             $cant = pNum('cantidad');
             $motivo = pTxt('referencia', 80) ?: ($tipo === 'entrada' ? 'Entrada manual' : 'Salida manual');
+            $provId   = pInt('proveedor_id', 0);
+            $documento = pTxt('documento', 40);
 
             if ($id <= 0 || $cant === 0.0) {
                 salida(['ok' => false, 'error' => 'Indica el producto y la cantidad.'], 422);
@@ -347,24 +394,130 @@ try {
                 }
                 $antes = (float) $pr['stock'];
                 $ahora = redondear($antes + $delta);
+
+                // Al comprar de un proveedor, se actualiza el costo del producto
+                $costoNuevo = (float) ($pr['costo'] ?? 0);
+                if ($delta > 0 && $provId > 0 && p('costo_unitario') !== null && pNum('costo_unitario') > 0) {
+                    $costoNuevo = pNum('costo_unitario');
+                    $bd->prepare('UPDATE productos SET costo = ? WHERE id = ?')->execute([$costoNuevo, $id]);
+                }
+
                 $bd->prepare('UPDATE productos SET stock = ? WHERE id = ?')->execute([$ahora, $id]);
                 registrarMovimiento([
                     'tipo' => $delta > 0 ? 'entrada' : 'salida', 'producto_id' => $id,
                     'producto_nombre' => $pr['nombre'], 'cantidad' => $delta,
                     'stock_anterior' => $antes, 'stock_actual' => $ahora,
                     'referencia' => $motivo, 'usuario' => nombreUsuario(),
+                    'proveedor_id' => $provId ?: null, 'documento' => $documento ?: null,
                 ]);
                 $bd->commit();
             } catch (Throwable $e) {
                 $bd->rollBack();
                 throw $e;
             }
-            salida(['ok' => true, 'stock' => $ahora]);
+            salida(['ok' => true, 'stock' => $ahora, 'costo' => $costoNuevo]);
         }
 
         case 'categorias': {
             $st = $bd->query("SELECT DISTINCT categoria FROM productos WHERE categoria <> '' AND categoria IS NOT NULL ORDER BY categoria");
             salida(['ok' => true, 'categorias' => $st->fetchAll(PDO::FETCH_COLUMN)]);
+        }
+
+        /* ============================================================
+           MEDIOS DE PAGO (configurables)
+           ============================================================ */
+        case 'medios_pago': {
+            salida(['ok' => true, 'medios' => mediosPago(((string) p('todos', '')) === '1')]);
+        }
+
+        case 'medio_pago_guardar': {
+            $id   = pInt('id', 0);
+            $nombre = pTxt('nombre', 40);
+            if ($nombre === '') {
+                salida(['ok' => false, 'error' => 'El nombre del medio de pago es obligatorio.'], 422);
+            }
+            $icono   = pTxt('icono', 8) ?: '💳';
+            $refReq  = ((string) p('referencia', '0')) === '1' ? 1 : 0;
+            $esEfec  = ((string) p('efectivo', '0')) === '1' ? 1 : 0;
+            $activo  = p('activo') === null ? 1 : (((string) p('activo', '1')) === '1' ? 1 : 0);
+            $orden   = pInt('orden', 99);
+
+            $st = $bd->prepare('SELECT id FROM medios_pago WHERE LOWER(nombre) = LOWER(?) AND id <> ?');
+            $st->execute([$nombre, $id]);
+            if ($st->fetch()) {
+                salida(['ok' => false, 'error' => 'Ya existe un medio de pago con ese nombre.'], 409);
+            }
+
+            if ($id > 0) {
+                $bd->prepare('UPDATE medios_pago SET nombre=?, icono=?, exige_referencia=?, es_efectivo=?, activo=?, orden=? WHERE id=?')
+                   ->execute([$nombre, $icono, $refReq, $esEfec, $activo, $orden, $id]);
+            } else {
+                $bd->prepare('INSERT INTO medios_pago (nombre,icono,exige_referencia,es_efectivo,activo,orden) VALUES (?,?,?,?,?,?)')
+                   ->execute([$nombre, $icono, $refReq, $esEfec, $activo, $orden]);
+                $id = (int) $bd->lastInsertId();
+            }
+            salida(['ok' => true, 'id' => $id, 'medios' => mediosPago(false)]);
+        }
+
+        case 'medio_pago_borrar': {
+            $id = pInt('id');
+            $uso = (int) $bd->query('SELECT COUNT(*) FROM ventas WHERE metodo = (SELECT nombre FROM medios_pago WHERE id = ' . $id . ')')
+                      ->fetchColumn();
+            if ($uso > 0) {
+                // No se borra algo que ya se uso: se desactiva
+                $bd->prepare('UPDATE medios_pago SET activo = 0 WHERE id = ?')->execute([$id]);
+                salida(['ok' => true, 'desactivado' => true, 'uso' => $uso]);
+            }
+            $bd->prepare('DELETE FROM medios_pago WHERE id = ?')->execute([$id]);
+            salida(['ok' => true, 'desactivado' => false, 'uso' => 0]);
+        }
+
+        /* ============================================================
+           PROVEEDORES
+           ============================================================ */
+        case 'proveedores': {
+            $st = $bd->query(
+                'SELECT pv.*, (SELECT COUNT(*) FROM productos WHERE proveedor_id = pv.id) AS articulos
+                 FROM proveedores pv ORDER BY pv.nombre'
+            );
+            salida(['ok' => true, 'proveedores' => array_map(fn($f) => [
+                'id' => (int) $f['id'], 'nombre' => $f['nombre'],
+                'telefono' => $f['telefono'] ?? '', 'email' => $f['email'] ?? '',
+                'observaciones' => $f['observaciones'] ?? '',
+                'activo' => (int) $f['activo'] === 1, 'articulos' => (int) $f['articulos'],
+            ], $st->fetchAll())]);
+        }
+
+        case 'proveedor_guardar': {
+            $id     = pInt('id', 0);
+            $nombre = pTxt('nombre', 120);
+            if ($nombre === '') {
+                salida(['ok' => false, 'error' => 'El nombre del proveedor es obligatorio.'], 422);
+            }
+            $tel  = pTxt('telefono', 40);
+            $mail = pTxt('email', 120);
+            $obs  = pTxt('observaciones', 500);
+            $act  = p('activo') === null ? 1 : (((string) p('activo', '1')) === '1' ? 1 : 0);
+
+            if ($id > 0) {
+                $bd->prepare('UPDATE proveedores SET nombre=?, telefono=?, email=?, observaciones=?, activo=? WHERE id=?')
+                   ->execute([$nombre, $tel ?: null, $mail ?: null, $obs ?: null, $act, $id]);
+            } else {
+                $bd->prepare('INSERT INTO proveedores (nombre,telefono,email,observaciones,activo) VALUES (?,?,?,?,?)')
+                   ->execute([$nombre, $tel ?: null, $mail ?: null, $obs ?: null, $act]);
+                $id = (int) $bd->lastInsertId();
+            }
+            salida(['ok' => true, 'id' => $id]);
+        }
+
+        case 'proveedor_borrar': {
+            $id = pInt('id');
+            $usados = (int) $bd->query('SELECT COUNT(*) FROM productos WHERE proveedor_id = ' . $id)->fetchColumn();
+            if ($usados > 0) {
+                $bd->prepare('UPDATE productos SET proveedor_id = NULL WHERE proveedor_id = ?')->execute([$id]);
+            }
+            $bd->prepare('DELETE FROM proveedores WHERE id = ?')->execute([$id]);
+            salida(['ok' => true, 'desasignados' => $usados]);
         }
 
         /* ============================================================
@@ -437,11 +590,12 @@ try {
 
                 // 4. Items + descuento de existencias + kardex
                 $stItem = $bd->prepare(
-                    'INSERT INTO venta_items (venta_id,producto_id,nombre,codigo,precio,cantidad,importe)
-                     VALUES (?,?,?,?,?,?,?)'
+                    'INSERT INTO venta_items (venta_id,producto_id,nombre,codigo,precio,cantidad,importe,costo_unitario)
+                     VALUES (?,?,?,?,?,?,?,?)'
                 );
                 $stUpd  = $bd->prepare('UPDATE productos SET stock = ? WHERE id = ?');
                 $sinStock = [];
+                $costoVendido = 0.0;
                 foreach ($lineas as $l) {
                     $pr   = $l['p'];
                     $antes = (float) $pr['stock'];
@@ -449,8 +603,10 @@ try {
                     if ($ahora < 0) {
                         $sinStock[] = $pr['nombre'];
                     }
+                    $costoLinea = redondear((float) ($pr['costo'] ?? 0) * $l['cant']);
+                    $costoVendido = redondear($costoVendido + $costoLinea);
                     $stItem->execute([$ventaId, (int) $pr['id'], $pr['nombre'], $pr['codigo'],
-                                      $l['precio'], $l['cant'], $l['importe']]);
+                                      $l['precio'], $l['cant'], $l['importe'], (float) ($pr['costo'] ?? 0)]);
                     $stUpd->execute([$ahora, (int) $pr['id']]);
                     registrarMovimiento([
                         'tipo' => 'venta', 'producto_id' => (int) $pr['id'], 'producto_nombre' => $pr['nombre'],
@@ -468,6 +624,8 @@ try {
             $st = $bd->prepare('SELECT * FROM ventas WHERE id = ?');
             $st->execute([$ventaId]);
             $v = venta($st->fetch());
+            $v['costo']    = $costoVendido;
+            $v['utilidad'] = redondear($total - $costoVendido);
             $st = $bd->prepare('SELECT * FROM venta_items WHERE venta_id = ? ORDER BY id');
             $st->execute([$ventaId]);
             $v['items'] = array_map(fn($i) => [
@@ -601,6 +759,15 @@ try {
             $st->execute([$d, $h]);
             $res = $st->fetch();
 
+            // Costo de la mercancia vendida en el periodo (costo congelado al vender)
+            $st = $bd->prepare(
+                'SELECT COALESCE(SUM(vi.cantidad * vi.costo_unitario),0) AS costo
+                 FROM venta_items vi INNER JOIN ventas v2 ON v2.id = vi.venta_id
+                 WHERE v2.anulada = 0 AND v2.fecha BETWEEN ? AND ?'
+            );
+            $st->execute([$d, $h]);
+            $costoPeriodo = (float) $st->fetchColumn();
+
             $st = $bd->prepare('SELECT COUNT(*) AS anuladas FROM ventas WHERE anulada = 1 AND fecha BETWEEN ? AND ?');
             $st->execute([$d, $h]);
             $anuladas = (int) $st->fetchColumn();
@@ -612,14 +779,22 @@ try {
             $porHora = array_map(fn($r) => ['h' => (int) $r['h'], 'ventas' => (int) $r['n'], 'total' => (float) $r['t']], $st->fetchAll());
 
             $st = $bd->prepare(
-                'SELECT vi.nombre, SUM(vi.cantidad) AS unidades, SUM(vi.importe) AS vendido, SUM(vi.cantidad) AS c
+                'SELECT vi.nombre, SUM(vi.cantidad) AS unidades, SUM(vi.importe) AS vendido,
+                        SUM(vi.cantidad * vi.costo_unitario) AS costo, SUM(vi.cantidad) AS c
                  FROM venta_items vi
                  INNER JOIN ventas v ON v.id = vi.venta_id
                  WHERE v.anulada = 0 AND v.fecha BETWEEN ? AND ?
                  GROUP BY vi.nombre ORDER BY c DESC, vi.nombre ASC LIMIT 12'
             );
             $st->execute([$d, $h]);
-            $top = array_map(fn($r) => ['nombre' => $r['nombre'], 'unidades' => (float) $r['unidades'], 'vendido' => (float) $r['vendido']], $st->fetchAll());
+            $top = array_map(fn($r) => [
+                'nombre' => $r['nombre'],
+                'unidades' => (float) $r['unidades'],
+                'vendido' => (float) $r['vendido'],
+                'costo' => (float) $r['costo'],
+                'margen' => (float) $r['vendido'] > 0
+                    ? redondear((($r['vendido'] - $r['costo']) / $r['vendido']) * 100) : 0.0,
+            ], $st->fetchAll());
 
             $st = $bd->prepare('SELECT metodo, COUNT(*) AS n, COALESCE(SUM(total),0) AS t
                                 FROM ventas WHERE anulada = 0 AND fecha BETWEEN ? AND ?
@@ -637,9 +812,12 @@ try {
                 'unidad' => $r['unidad'], 'precio' => (float) $r['precio'],
             ], $st->fetchAll());
 
-            $st = $bd->query('SELECT COALESCE(SUM(stock*precio),0) AS v, COALESCE(SUM(stock),0) AS u
+            $st = $bd->query('SELECT COALESCE(SUM(stock*precio),0) AS v, COALESCE(SUM(stock*minimo),0) AS m,
+                                     COALESCE(SUM(stock*costo),0) AS c, COALESCE(SUM(stock),0) AS u
                              FROM productos WHERE activo = 1');
             $inv = $st->fetch();
+            $costoInv = (float) $inv['c'];
+            $ventaInv = (float) $inv['v'];
 
             salida([
                 'ok'    => true,
@@ -650,7 +828,13 @@ try {
                     'descuentos'  => (float) $res['descuentos'],
                     'mayor'       => (float) $res['mayor'],
                     'anuladas'    => $anuladas,
-                    'inventario'  => (float) $inv['v'],
+                    'costo'       => redondear($costoPeriodo),
+                    'utilidad'    => redondear((float) $res['total'] - $costoPeriodo),
+                    'margen'      => (float) $res['total'] > 0
+                        ? redondear(((($res['total'] - $costoPeriodo) / $res['total']) * 100)) : 0.0,
+                    'inventario'  => $ventaInv,
+                    'costo_inventario' => $costoInv,
+                    'ganancia_potencial' => redondear($ventaInv - $costoInv),
                     'unidades'    => (float) $inv['u'],
                 ],
                 'por_hora'  => $porHora,

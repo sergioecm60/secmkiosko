@@ -273,8 +273,8 @@ function registrarMovimiento(array $d): void
 {
     $st = pdoBd()->prepare(
         'INSERT INTO `movimientos`
-         (`fecha`,`tipo`,`producto_id`,`producto_nombre`,`cantidad`,`stock_anterior`,`stock_actual`,`referencia`,`usuario`)
-         VALUES (?,?,?,?,?,?,?,?,?)'
+         (`fecha`,`tipo`,`producto_id`,`producto_nombre`,`cantidad`,`stock_anterior`,`stock_actual`,`referencia`,`usuario`,`proveedor_id`,`documento`)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)'
     );
     $st->execute([
         $d['fecha'] ?? date('Y-m-d H:i:s'),
@@ -286,12 +286,126 @@ function registrarMovimiento(array $d): void
         redondear($d['stock_actual'] ?? 0),
         $d['referencia'] ?? null,
         $d['usuario'] ?? null,
+        $d['proveedor_id'] ?? null,
+        $d['documento'] ?? null,
     ]);
 }
 
 function nombreUsuario(): string
 {
     return texto(valorConfig('operador', ''), 50) ?: 'Cajero';
+}
+
+/* ---------------------------------------------------------------
+   Migraciones: agregan tablas y columnas nuevas sin romper installs viejos
+   --------------------------------------------------------------- */
+function columnaExiste(string $tabla, string $columna): bool
+{
+    $st = pdoBd()->prepare(
+        'SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?'
+    );
+    $st->execute([DB_NOMBRE, $tabla, $columna]);
+    return ((int) $st->fetchColumn()) > 0;
+}
+
+function tablaExiste(string $tabla): bool
+{
+    $st = pdoBd()->prepare(
+        'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?'
+    );
+    $st->execute([DB_NOMBRE, $tabla]);
+    return ((int) $st->fetchColumn()) > 0;
+}
+
+function agregarColumna(string $tabla, string $definicion): void
+{
+    // Quita las comillas invertidas para comparar contra COLUMN_NAME
+    $col = trim(str_replace('`', '', preg_split('/\s+/', trim($definicion))[0]));
+    if (!columnaExiste($tabla, $col)) {
+        pdoBd()->exec("ALTER TABLE `$tabla` ADD COLUMN $definicion");
+    }
+}
+
+/**
+ * Aplica las mejoras de esquema. Es idempotente: se puede correr
+ * cuantas veces se quiera sin romper nada.
+ */
+function actualizarEsquema(): array
+{
+    $hechas = [];
+    $pdo = pdoBd();
+
+    // --- 1. Precio de costo y observaciones en productos ---
+    agregarColumna('productos', '`costo` DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+    agregarColumna('productos', '`observaciones` TEXT NULL');
+    agregarColumna('productos', '`proveedor_id` INT UNSIGNED NULL');
+    $hechas[] = 'productos: costo, observaciones, proveedor_id';
+
+    // --- 2. Proveedores ---
+    $pdo->exec('CREATE TABLE IF NOT EXISTS `proveedores` (
+        `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `nombre`        VARCHAR(120) NOT NULL,
+        `telefono`      VARCHAR(40)  NULL,
+        `email`         VARCHAR(120) NULL,
+        `observaciones` TEXT         NULL,
+        `activo`        TINYINT(1)   NOT NULL DEFAULT 1,
+        `creado`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `ix_nombre` (`nombre`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    $hechas[] = 'tabla proveedores';
+
+    // --- 3. Medios de pago configurables ---
+    $pdo->exec('CREATE TABLE IF NOT EXISTS `medios_pago` (
+        `id`                SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `nombre`            VARCHAR(40)  NOT NULL,
+        `icono`             VARCHAR(8)   NULL,
+        `exige_referencia`  TINYINT(1)   NOT NULL DEFAULT 0,
+        `es_efectivo`       TINYINT(1)   NOT NULL DEFAULT 0,
+        `activo`            TINYINT(1)   NOT NULL DEFAULT 1,
+        `orden`             SMALLINT     NOT NULL DEFAULT 0,
+        PRIMARY KEY (`id`),
+        KEY `ix_activo` (`activo`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    agregarColumna('medios_pago', '`es_efectivo` TINYINT(1) NOT NULL DEFAULT 0');
+    $hechas[] = 'tabla medios_pago';
+
+    // Efectivo: recibe vuelto. Tarjeta/transferencia: solo referencia.
+    $pdo->prepare('UPDATE medios_pago SET es_efectivo = 1, exige_referencia = 0 WHERE LOWER(nombre) LIKE ?')
+       ->execute(['%efectivo%']);
+
+    // --- 4. Proveedor y documento en los movimientos de mercancia ---
+    agregarColumna('movimientos', '`proveedor_id` INT UNSIGNED NULL');
+    agregarColumna('movimientos', '`documento` VARCHAR(40) NULL');
+    $hechas[] = 'movimientos: proveedor_id, documento';
+
+    // El costo se congela al vender: si mañana suben el precio de compra,
+    // el margen historico de las ventas viejas no debe cambiar.
+    agregarColumna('venta_items', '`costo_unitario` DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+    $hechas[] = 'venta_items: costo_unitario';
+
+    // --- 5. Proveedor en la venta (de whom compramos, no, pero queda el dato del cajero) ---
+    agregarColumna('ventas', '`proveedor_id` INT UNSIGNED NULL');
+    $hechas[] = 'ventas: proveedor_id';
+
+    // --- 6. Medios de pago por defecto ---
+    $n = (int) $pdo->query('SELECT COUNT(*) FROM `medios_pago`')->fetchColumn();
+    if ($n === 0) {
+        $st = $pdo->prepare('INSERT INTO `medios_pago` (`nombre`,`icono`,`exige_referencia`,`orden`,`es_efectivo`) VALUES (?,?,?,?,?)');
+        $defectos = [
+            ['Efectivo',       '💵', 0, 1, 1],
+            ['Tarjeta',        '💳', 1, 2, 0],
+            ['Transferencia',  '📱', 1, 3, 0],
+            ['Mercado Pago',   '🅿️', 1, 4, 0],
+        ];
+        foreach ($defectos as $d) {
+            $st->execute($d);
+        }
+        $hechas[] = 'medios de pago por defecto';
+    }
+
+    return $hechas;
 }
 
 /* ---------------------------------------------------------------
