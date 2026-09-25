@@ -11,14 +11,20 @@ Corre íntegramente en una PC con Windows, **sin internet y sin servicios en la 
 
 - **Punto de venta** con búsqueda por nombre o código de barras, carrito con cantidades
   y cobro por efectivo, tarjeta o transferencia, con cálculo de vuelto.
+- **Costo de compra y margen** por producto. El costo se congela al vender, así el
+  margen histórico no cambia cuando después sube el precio de compra.
 - **Control de existencias**: el stock se descuenta solo al vender, avisa cuando un producto
   queda por debajo del mínimo y avisa si una venta deja el inventario en negativo.
 - **Kardex**: cada entrada, salida, venta o anulación queda registrada con stock anterior,
   stock actual, fecha y motivo.
+- **Entradas de mercancía** con proveedor y número de remito: sabés de qué compra salió
+  cada caja. Si cargás el costo nuevo, se actualiza el margen del producto.
 - **Historial de ventas** con anulación (devuelve el stock) y reimpresión de tickets.
-- **Reportes**: importe, ticket promedio, ventas por hora, productos más vendidos,
-  reparto por forma de pago y lista de productos por reponer.
-- **Entradas y salidas de mercancía** para compras, mermas o conteos físicos.
+- **Reportes**: ganancia bruta, costo de mercancía, margen, ventas por hora, productos más
+  vendidos, reparto por forma de pago y lista de productos por reponer.
+- **Medios de pago configurables**: agregás Mercado Pago, débito, cobros, etc., y definís
+  cuáles reciben vuelto y cuáles piden referencia.
+- **Proveedores** con sus datos y notas.
 - **Respaldo y restauración** de toda la base en un archivo `.sql`.
 
 ## Requisitos
@@ -63,10 +69,12 @@ kiosco/
 
 | Tabla | Contenido |
 |---|---|
-| `productos` | Catálogo, precio, stock, stock mínimo, categoría, unidad |
+| `productos` | Catálogo, precio de venta, **costo**, stock, stock mínimo, categoría, unidad, **proveedor**, observaciones |
 | `ventas` | Cabecera: folio, fecha, totales, medio de pago, anulación |
-| `venta_items` | Detalle de cada venta (se conserva el nombre histórico) |
-| `movimientos` | Kardex de inventario |
+| `venta_items` | Detalle de cada venta, con el **costo congelado al vender** para el margen histórico |
+| `movimientos` | Kardex de inventario, con **proveedor y número de remito** |
+| `proveedores` | Datos de proveedores |
+| `medios_pago` | Métodos de pago configurables (icono, si recibe vuelto, si pide referencia) |
 | `config` | Datos del negocio, moneda, folios, tema |
 
 ## Atajos de teclado
