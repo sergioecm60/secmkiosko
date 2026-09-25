@@ -21,7 +21,7 @@ const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-
 
 function dinero(n, simbolo) {
   const v = r2(n);
-  const txt = v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const txt = v.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (simbolo === false) return txt;
   return (estado.config.moneda || "$") + txt;
 }
@@ -37,17 +37,31 @@ function diasAtras(n) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
+const dosDig = (n) => String(n).padStart(2, "0");
+
+/**
+ * Formato de fecha y hora de negocio: dd/mm/aaaa hh:mm en 24 horas.
+ * Se arma a mano en vez de usar toLocaleString porque el locale es-AR
+ * devuelve "25/09/26, 05:15 p. m." (12 horas y año de 2 cifras), que en
+ * Argentina no se usa.
+ */
 function fechaHora(iso) {
   const d = new Date(String(iso).replace(" ", "T"));
   if (isNaN(d)) return "—";
-  return d.toLocaleString("es-MX", {
-    day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit"
-  });
+  return dosDig(d.getDate()) + "/" + dosDig(d.getMonth() + 1) + "/" + d.getFullYear()
+    + " " + dosDig(d.getHours()) + ":" + dosDig(d.getMinutes());
+}
+
+/** Solo la fecha: dd/mm/aaaa */
+function fechaCorta(iso) {
+  const d = new Date(String(iso).replace(" ", "T"));
+  if (isNaN(d)) return "—";
+  return dosDig(d.getDate()) + "/" + dosDig(d.getMonth() + 1) + "/" + d.getFullYear();
 }
 
 function numeroLocal(n, dec) {
   const v = Number(n) || 0;
-  return v.toLocaleString("es-MX", {
+  return v.toLocaleString("es-AR", {
     minimumFractionDigits: dec == null ? 0 : dec,
     maximumFractionDigits: dec == null ? 0 : dec
   });
@@ -1336,7 +1350,7 @@ async function refrescarCabecera() {
   aplicarMarca();
   $("#lbl-hoy-total").textContent = dinero(r.hoy.total);
   const d = new Date();
-  $("#lbl-hoy").textContent = d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+  $("#lbl-hoy").textContent = d.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
 }
 
 /* =====================================================================
@@ -1657,7 +1671,7 @@ async function exportarVentas() {
       try { arts = (await api("venta", { id: v.id })).venta.items.reduce((s, i) => s + i.cantidad, 0); } catch (e) { /* ok */ }
       filas.push([
         v.folio,
-        d.toLocaleDateString("es-MX"), d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+        fechaCorta(v.fecha), dosDig(d.getHours()) + ":" + dosDig(d.getMinutes()),
         numeroLocal(arts, 0), v.metodo, v.subtotal.toFixed(2), v.descuento.toFixed(2), v.total.toFixed(2),
         v.anulada ? "Anulada" : "Válida", v.referencia || ""
       ]);
