@@ -1,0 +1,26 @@
+# Respaldos de la base de datos.
+# Contiene datos reales del negocio (productos, ventas, clientes): NO se suben.
+datos/
+
+# Archivos de diagnostico y pruebas locales
+_diag.php
+_prueba.php
+*.log
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store
+$RECYCLE.BIN/
+ehthumbs.db
+Thumbs.db:encryptable
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*~
+
+# Node /Composer (por si en el futuro se usan)
+node_modules/
+vendor/
