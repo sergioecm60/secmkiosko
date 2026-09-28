@@ -1,5 +1,5 @@
 /* =====================================================================
-   KIOSCO — hoja de estilos
+   KIOSCO â€” hoja de estilos
    ===================================================================== */
 
 /* ---------------- TEMA ---------------- */
@@ -120,6 +120,15 @@ main{flex:1; min-height:0; position:relative}
   background:var(--badbg); color:var(--bad); text-transform:uppercase; letter-spacing:.3px;
 }
 .marca.bajo{background:var(--warnbg); color:var(--warn)}
+.marca.libre{background:var(--okbg); color:var(--ok)}
+
+/* Barra del producto rápido, arriba de los filtros de categoría */
+.barra-rapida{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  margin:0 0 10px; padding:8px 10px;
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
+}
+.barra-rapida .fuente{color:var(--muted); font-size:12.5px; flex:1; min-width:0}
 
 /* Carrito */
 .carrito-cab{
@@ -157,6 +166,14 @@ main{flex:1; min-height:0; position:relative}
   cursor:pointer; border-radius:7px; font-size:15px;
 }
 .quitar:hover{background:var(--badbg); color:var(--bad)}
+.presets-linea{margin-top:5px}
+.chips{display:flex; flex-wrap:wrap; gap:4px}
+.chip{
+  border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+  border-radius:999px; padding:2px 9px; font-size:11.5px; font-weight:600;
+  cursor:pointer; line-height:1.5; white-space:nowrap;
+}
+.chip:hover{background:var(--brand); border-color:var(--brand); color:var(--onbrand)}
 .carrito-pie{flex:0 0 auto; border-top:1px solid var(--line); padding:13px 15px 15px; background:var(--panel2)}
 .fila{display:flex; justify-content:space-between; align-items:center; padding:3px 0; font-size:13.5px; color:var(--muted)}
 .fila b{color:var(--ink); font-weight:650}
@@ -175,7 +192,7 @@ main{flex:1; min-height:0; position:relative}
 .btn-cobrar:active{transform:scale(.985)}
 .btn-cobrar:disabled{background:var(--line); color:var(--muted); cursor:not-allowed; box-shadow:none; filter:none}
 
-/* ---------------- VACÍOS ---------------- */
+/* ---------------- VACÃOS ---------------- */
 .vacio{
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:11px;
   padding:52px 20px; color:var(--muted); text-align:center; height:100%;
@@ -199,6 +216,142 @@ main{flex:1; min-height:0; position:relative}
 .campo input:focus,.campo select:focus,.campo textarea:focus{border-color:var(--brand); background:var(--panel)}
 .rejilla{display:grid; gap:13px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
 .rejilla2{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); align-items:start}
+
+/* --- Ajustes: secciones apiladas, cada una con su propia retÃ­cula --- */
+.ajustes{display:flex; flex-direction:column; gap:14px; max-width:1180px}
+.ajustes-tit{
+  font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); margin:8px 0 -2px; padding-left:2px;
+}
+.rejilla1{display:grid; gap:16px; grid-template-columns:1fr; align-items:start}
+@media (min-width:900px){
+  .rejilla2{grid-template-columns:1fr 1fr}
+}
+
+/* ---------------- SESIÃ“N ---------------- */
+.sesion-caja{
+  display:flex; flex-direction:column; align-items:flex-end; gap:1px;
+  padding:0 10px; border-left:1px solid var(--line); line-height:1.15;
+}
+.sesion-caja .pt{font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted)}
+.sesion-caja .pv{font-size:14px; font-weight:700; white-space:nowrap}
+.sesion-caja.abierto .pv{color:var(--ok)}
+.sesion-caja.cerrado .pv{color:var(--warn)}
+
+.menu-usuario{position:relative; flex:0 0 auto}
+.usuario-btn{
+  display:flex; align-items:center; gap:9px; padding:5px 9px 5px 5px;
+  background:var(--panel); border:1px solid var(--line); border-radius:11px; cursor:pointer;
+}
+.usuario-btn:hover{background:var(--panel2)}
+.usuario-btn .avatar{
+  width:28px; height:28px; flex:0 0 28px; border-radius:8px; display:grid; place-items:center;
+  background:linear-gradient(140deg,var(--brand),var(--brand2)); color:#fff; font-weight:700; font-size:13px;
+}
+.udatos{display:flex; flex-direction:column; align-items:flex-start; line-height:1.15}
+.unombre{font-size:12.5px; font-weight:650; max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.urole{font-size:10.5px; color:var(--muted)}
+.menu-usuario .flecha{color:var(--muted); font-size:11px}
+
+.menu-lista{
+  position:absolute; right:0; top:calc(100% + 7px); min-width:214px; z-index:60;
+  background:var(--panel); border:1px solid var(--line); border-radius:11px;
+  box-shadow:var(--shadow); padding:6px; display:none;
+}
+.menu-lista.on{display:block}
+.menu-lista button,.menu-lista a{
+  display:flex; align-items:center; gap:9px; width:100%; text-align:left;
+  padding:9px 11px; border:0; background:transparent; border-radius:8px;
+  cursor:pointer; text-decoration:none; color:var(--ink); font-size:13.5px;
+}
+.menu-lista button:hover,.menu-lista a:hover{background:var(--panel2)}
+.menu-lista a.peligro{color:var(--bad)}
+.menu-sep{height:1px; background:var(--line2); margin:5px 4px}
+
+.aviso-rol{
+  flex:0 0 auto; padding:7px 16px; font-size:12.5px; color:var(--warn);
+  background:var(--warnbg); border-bottom:1px solid var(--line);
+}
+.aviso-rol b{font-weight:700}
+
+/* SÃ³lo el administrador ve configuraciÃ³n, catÃ¡logo y usuarios. */
+body[data-rol="vendedor"] .solo-admin{display:none !important}
+
+/* ---------------- CAJAS ---------------- */
+.cajas-wrap{display:flex; flex-direction:column; gap:16px; max-width:1180px}
+#mi-caja-estado .etq{font-size:11.5px}
+
+.caja-abrir{
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:15px 17px; border-radius:11px; border:1px solid var(--line);
+  background:var(--panel2); flex-wrap:wrap;
+}
+.caja-abrir .txt{min-width:200px; flex:1}
+.caja-abrir .txt b{display:block; font-size:14.5px; margin-bottom:3px}
+.caja-abrir .txt span{font-size:12.5px; color:var(--muted); line-height:1.45}
+
+.caja-nums{display:grid; grid-template-columns:repeat(auto-fit,minmax(122px,1fr)); gap:10px}
+.caja-nums .n{
+  background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:11px 12px;
+}
+.caja-nums .n .cap{font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:3px}
+.caja-nums .n .val{font-size:17px; font-weight:700; font-variant-numeric:tabular-nums}
+.caja-nums .n.ok .val{color:var(--ok)}
+.caja-nums .n.mal .val{color:var(--bad)}
+.caja-nums .n.aviso-w .val{color:var(--warn)}
+
+.tabla-mp{width:100%; border-collapse:collapse; margin-top:4px}
+.tabla-mp th{
+  font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted);
+  text-align:left; padding:7px 9px; border-bottom:1px solid var(--line);
+}
+.tabla-mp td{padding:9px; border-bottom:1px solid var(--line2); font-size:13.5px; vertical-align:middle}
+.tabla-mp th.num,.tabla-mp td.num{text-align:right; font-variant-numeric:tabular-nums}
+.tabla-mp tr:last-child td{border-bottom:0}
+.tabla-mp .mp-ico{font-size:16px; width:26px}
+.tabla-mp .declarado{width:130px}
+.tabla-mp .declarado input{
+  width:100%; text-align:right; font-variant-numeric:tabular-nums; font-weight:600;
+  padding:7px 9px;
+}
+.tabla-mp input.cuadra{border-color:var(--ok); background:var(--okbg)}
+.tabla-mp input.nocuadra{border-color:var(--bad); background:var(--badbg)}
+.tabla-mp .dif{font-weight:700}
+.tabla-mp .dif.cero{color:var(--ok)}
+.tabla-mp .dif.sobra{color:var(--warn)}
+.tabla-mp .dif.falta{color:var(--bad)}
+.tabla-mp tfoot td{font-weight:700; border-top:2px solid var(--line); background:var(--panel2)}
+
+.check{display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13.5px}
+.check input{width:16px; height:16px; cursor:pointer}
+
+/* Ticket de caja: se imprime sÃ³lo lo que estÃ¡ dentro de #ticket-caja */
+#ticket-caja{display:none}
+@media print{
+  /* Ver nota en #ticket: el ancho de pagina lo decide la impresora. */
+  @page{margin:0}
+  html,body{overflow:visible !important; height:auto !important; background:#fff !important}
+  /* se oculta todo y solo se muestra el ticket que marco imprimirTicketAhora() */
+  .topbar, main, .velo, #avisos{display:none !important}
+  #ticket, #ticket-caja, #ticket-comanda{display:none !important}
+  body[data-imprimir="caja"] #ticket-caja{display:block !important}
+  body[data-imprimir="caja"] #ticket-caja{
+    width:78mm; max-width:100%; margin:0 auto; padding:2mm 1mm;
+    color:#000; background:#fff;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  #ticket-caja .papel{
+    width:100%; margin:0; font:12px/1.45 "Consolas","Courier New",monospace; color:#000; background:#fff;
+  }
+  #ticket-caja h1{font-size:15px; text-align:center; margin:0 0 3px}
+  #ticket-caja .cen{text-align:center; font-size:11px; margin-bottom:9px}
+  #ticket-caja hr{border:0; border-top:1px dashed #999; margin:7px 0}
+  #ticket-caja .lin{display:flex; justify-content:space-between; gap:8px}
+  #ticket-caja .mp{margin-bottom:4px}
+  #ticket-caja .mp b{float:right}
+  #ticket-caja .tot{font-size:15px; font-weight:700; margin-top:5px}
+  #ticket-caja .firma{margin-top:26px; font-size:11px; text-align:center; color:#333}
+}
 .parrafo{font-size:13.5px; color:var(--muted); line-height:1.55; margin:0 0 13px}
 .subt{font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px}
 .filetools{display:flex; gap:9px; flex-wrap:wrap; align-items:center}
@@ -248,7 +401,19 @@ main{flex:1; min-height:0; position:relative}
 .etq.neutro{background:var(--line2); color:var(--muted)}
 .envoltura{border-radius:var(--r); border:1px solid var(--line); background:var(--panel); overflow:hidden; box-shadow:var(--shadow)}
 .con-foto{display:flex; gap:16px; align-items:flex-start}
+.con-foto>.col-foto{position:sticky; top:0}
 .col-foto{display:flex; flex-direction:column; gap:6px; align-items:center; flex:0 0 auto}
+.mp-campos{gap:13px 14px}
+.mp-bloque{grid-column:1/-1; margin-top:20px}
+.mp-bloque:first-child{margin-top:0}
+@media (max-width:640px){
+  .con-foto{flex-direction:column}
+  .con-foto>.col-foto{
+    position:static; flex-direction:row; align-items:center; width:100%;
+    padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:4px;
+  }
+  .col-foto .avatar.grande{width:64px;height:64px;font-size:26px}
+}
 .atajos{margin:0; padding-left:18px; font-size:13.5px; color:var(--muted); line-height:2}
 kbd{
   background:var(--panel2); border:1px solid var(--line); border-bottom-width:2px; border-radius:5px;
@@ -259,7 +424,7 @@ kbd{
   padding:11px 13px; font-size:13.5px; display:flex; justify-content:space-between; gap:10px; align-items:center;
 }
 
-/* ---------------- ESTADÍSTICAS ---------------- */
+/* ---------------- ESTADÃSTICAS ---------------- */
 .stats{display:grid; gap:13px; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); margin-bottom:16px}
 .stat{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:15px 16px; box-shadow:var(--shadow)}
 .stat .cap{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; font-weight:650}
@@ -343,12 +508,20 @@ kbd{
 /* ---------------- TICKET ---------------- */
 #ticket{display:none}
 @media print{
-  @page{size:80mm auto; margin:3mm}
+  @page{margin:0}
   html,body{overflow:visible !important; height:auto !important; background:#fff !important}
   .topbar, main, .velo, #avisos{display:none !important}
-  #ticket{
-    display:block !important; width:74mm; margin:0; padding:0; color:#000; background:#fff;
+  /* Ancho de ticket termico (80mm con 1mm de guia a cada lado).
+     NO se fija @page size a proposito: asi el ancho de pagina lo define la
+     impresora. En una termica de 80mm el ticket sale a lo ancho; en una
+     A4/Carta normal queda centrado, con las mismas proporciones. */
+  #ticket, #ticket-caja, #ticket-comanda{display:none !important}
+  body[data-imprimir="venta"] #ticket{display:block !important}
+  body[data-imprimir="venta"] #ticket{
+    width:78mm; max-width:100%; margin:0 auto; padding:2mm 1mm;
+    color:#000; background:#fff;
     font:11.5px/1.4 "Consolas", "Courier New", monospace;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
   }
   #ticket .t-cab{text-align:center; border-bottom:1px dashed #000; padding-bottom:7px; margin-bottom:7px}
   #ticket .t-neg{font-size:15px; font-weight:bold; letter-spacing:.5px}
@@ -360,4 +533,275 @@ kbd{
   #ticket .t-tot .d{text-align:right}
   #ticket .t-pie{text-align:center; margin-top:8px; font-size:10px}
   #ticket .t-obs{font-size:10px; margin-top:5px; text-align:center}
+}
+
+/* ---------- Formatos de compra y de venta ---------- */
+.fmt-lista{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+/* Compra: nombre, factor, precio, quitar. Venta suma el % sobre costo. */
+.fmt-fila{
+  display:grid;grid-template-columns:minmax(70px,1.4fr) minmax(58px,78px) minmax(68px,100px) 62px;
+  gap:6px;align-items:center;
+  background:var(--soft);border:1px solid var(--linea);border-radius:9px;padding:7px 8px;
+}
+.fmt-fila:has(.fmt-margen){grid-template-columns:minmax(64px,1.3fr) minmax(54px,70px) minmax(66px,94px) minmax(60px,84px) 62px}
+/* En pantallas angostas la fila se parte en dos columnas: los inputs siguen
+   mostrando su placeholder, asi que no se pierde que campo es cual. */
+@media (max-width:620px){
+  .fmt-fila, .fmt-fila:has(.fmt-margen){grid-template-columns:1fr 1fr}
+  .fmt-fila>.fmt-unidad{grid-column:1/-1}
+  .fmt-fila>.fmt-acciones{grid-column:1/-1}
+}
+.fmt-acciones{display:flex;gap:4px;justify-content:flex-end}
+.fmt-predet.on{background:var(--brand);border-color:var(--brand);color:var(--onbrand)}
+.fmt-fila input{width:100%;margin:0}
+.fmt-fila .fmt-calc{
+  grid-column:1/-1;font-size:11.5px;color:var(--muted);line-height:1.3;min-height:0;
+}
+.fmt-fila .fmt-calc:empty{display:none}
+.fmt-quitar{padding:5px 7px;line-height:1}
+.fmt-vacio{
+  margin:0 0 8px;padding:10px 12px;font-size:12.5px;color:var(--muted);
+  border:1px dashed var(--linea);border-radius:9px;text-align:center;
+}
+@media(max-width:720px){
+  .fmt-fila{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
+  .fmt-fila .fmt-unidad{grid-column:1/-1}
+  .fmt-quitar{justify-self:end}
+}
+
+/* ============================================================
+   COMANDAS DE COCINA Y DELIVERY
+   ============================================================ */
+.tab-cocina{position:relative}
+.cocina-barra{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  flex-wrap:wrap; margin-bottom:14px;
+}
+.cocina-filtros{display:flex; gap:8px; flex-wrap:wrap}
+.cocina-filtros button{
+  height:38px; padding:0 15px; border-radius:10px; cursor:pointer; font-weight:700; font-size:13.5px;
+  background:var(--panel); border:1px solid var(--line); color:var(--muted);
+  display:inline-flex; align-items:center; gap:7px;
+}
+.cocina-filtros button:hover{border-color:var(--brand); color:var(--ink)}
+.cocina-filtros button.on{background:var(--brand); border-color:var(--brand); color:#fff}
+.cocina-filtros button.on .pill{background:rgba(255,255,255,.25); color:#fff}
+.switch{display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--muted); cursor:pointer}
+.switch input{width:16px; height:16px; cursor:pointer}
+
+.cocina-tablero{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr));
+  gap:14px; align-items:start;
+}
+.coc-vacia{
+  grid-column:1/-1; padding:52px 20px; text-align:center; color:var(--muted);
+  border:2px dashed var(--linea); border-radius:14px;
+}
+.coc-vacia .ic{font-size:44px; display:block; margin-bottom:10px; opacity:.55}
+
+/* --- Tarjeta de comanda --- */
+.comanda{
+  background:var(--panel); border:1px solid var(--line); border-radius:14px;
+  box-shadow:0 2px 8px rgba(15,25,45,.05); overflow:hidden;
+  border-left:5px solid var(--line);
+}
+.comanda.pendiente {border-left-color:var(--brand)}
+.comanda.preparando{border-left-color:var(--warn)}
+.comanda.listo     {border-left-color:var(--ok)}
+.comanda.entregado {border-left-color:var(--line); opacity:.72}
+.comanda.cancelado {border-left-color:var(--bad); opacity:.6}
+.comanda.urgente{box-shadow:0 0 0 2px var(--badbg), 0 2px 10px rgba(185,28,28,.14)}
+
+.com-cab{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+  padding:11px 13px; border-bottom:1px solid var(--line2);
+}
+.com-quien{min-width:0}
+.com-cliente{
+  font-size:17px; font-weight:800; line-height:1.2; color:var(--ink);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.com-meta{font-size:12px; color:var(--muted); margin-top:2px; display:flex; gap:8px; flex-wrap:wrap}
+.com-id{
+  font:700 12px/1 "Consolas",monospace; color:var(--muted);
+  background:var(--panel2); padding:4px 7px; border-radius:7px; white-space:nowrap;
+}
+.com-tipo{
+  display:inline-block; font-size:11.5px; font-weight:800; padding:2px 8px; border-radius:999px;
+}
+.com-tipo.delivery{background:#e0edff; color:#1d4ed8}
+.com-tipo.retiro{background:#e7f6ec; color:#15803d}
+.com-tipo.mesa{background:#f3e8ff; color:#7e22ce}
+body.ocuro .com-tipo.delivery{background:#16305c; color:#93c5fd}
+body.ocuro .com-tipo.retiro{background:#13311f; color:#86efac}
+body.ocuro .com-tipo.mesa{background:#33164d; color:#d8b4fe}
+
+.com-datos{
+  padding:9px 13px; background:var(--panel2); font-size:12.5px; color:var(--ink);
+  display:flex; flex-direction:column; gap:3px; border-bottom:1px solid var(--line2);
+}
+.com-datos .d{display:flex; gap:7px; align-items:flex-start}
+.com-datos .d .ic{flex:0 0 auto; opacity:.7}
+.com-datos .d span{word-break:break-word}
+
+.com-items{padding:5px 0; list-style:none; margin:0}
+.com-item{
+  display:flex; align-items:flex-start; gap:9px; padding:7px 13px; font-size:14.5px; line-height:1.35;
+}
+.com-item .chk{
+  flex:0 0 auto; width:19px; height:19px; margin-top:1px; border-radius:6px; cursor:pointer;
+  border:2px solid var(--line); background:transparent; display:flex; align-items:center;
+  justify-content:center; font-size:12px; color:transparent; padding:0;
+}
+.com-item .chk:hover{border-color:var(--ok)}
+.com-item.listo .txt{text-decoration:line-through; color:var(--muted)}
+.com-item .txt{flex:1; min-width:0; color:var(--ink)}
+.com-item .txt b{font-weight:800}
+.com-item .det{display:block; font-size:12.5px; color:var(--muted); margin-top:1px}
+.com-item .quitar{
+  flex:0 0 auto; border:0; background:transparent; color:var(--muted); cursor:pointer;
+  font-size:15px; line-height:1; padding:0 2px;
+}
+.com-item .quitar:hover{color:var(--bad)}
+.com-item .cobra{font-size:11px; color:var(--ok); font-weight:700}
+
+.com-notas{
+  margin:0 13px 9px; padding:7px 10px; border-radius:9px;
+  background:var(--warnbg); color:var(--warn); font-size:12.5px; font-weight:600;
+}
+.com-pie{
+  display:flex; gap:7px; padding:10px 13px; border-top:1px solid var(--line2);
+  background:var(--panel2); flex-wrap:wrap;
+}
+.com-pie .btn{flex:1; min-width:0}
+.com-total{
+  padding:0 13px 9px; font-size:12.5px; color:var(--muted);
+}
+.com-total b{color:var(--ink)}
+
+/* --- Boton Delivery y aviso del carrito --- */
+.mini.delivery{
+  background:var(--brand); color:#fff; border-color:var(--brand); font-weight:700;
+}
+.mini.delivery:hover{filter:brightness(1.08); color:#fff}
+.comanda-aviso{
+  display:flex; align-items:center; gap:8px; margin:0 0 9px; padding:8px 11px;
+  border-radius:10px; background:var(--warnbg); color:var(--warn);
+  font-size:12.5px; font-weight:600;
+}
+.comanda-aviso b{font-weight:800}
+.comanda-aviso .lapiz{
+  margin-left:auto; border:0; background:transparent; cursor:pointer;
+  color:var(--warn); font-size:13px; padding:1px 3px; border-radius:5px;
+}
+.comanda-aviso .lapiz:hover{background:rgba(0,0,0,.08)}
+.comanda-aviso #btn-quitar-comanda{margin-left:0}
+
+/* --- Modal de comanda --- */
+.modal.ancho{max-width:900px}
+.sep{border:0; border-top:1px solid var(--line2); margin:18px 0}
+.campos{gap:14px}
+.segmentos{display:flex; gap:8px; flex-wrap:wrap}
+.segmentos button{
+  flex:1; min-width:110px; height:42px; border-radius:10px; cursor:pointer; font-weight:700;
+  font-size:14px; background:var(--panel2); border:1px solid var(--line); color:var(--muted);
+}
+.segmentos button:hover{border-color:var(--brand); color:var(--ink)}
+.segmentos button.on{background:var(--brand); border-color:var(--brand); color:#fff}
+
+.atajos{display:flex; flex-direction:column; gap:11px}
+.atajo-sec{display:flex; align-items:center; gap:9px; margin-bottom:6px}
+.atajo-sec .t{font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--muted)}
+.atajo-sec .ln{flex:1; height:1px; background:var(--line2)}
+.atajo-botones{display:flex; gap:7px; flex-wrap:wrap}
+.atajo{
+  min-height:40px; padding:7px 13px; border-radius:10px; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+  font-size:14px; font-weight:600; display:inline-flex; align-items:center; gap:6px;
+}
+.atajo:hover{border-color:var(--brand); color:var(--brand)}
+.atajo.con-producto{border-color:var(--ok); background:var(--okbg); color:var(--ok)}
+.atajo.con-producto:hover{filter:brightness(.97)}
+.atajo .pt{font-size:10.5px; opacity:.75; font-weight:700}
+
+.fila-agregar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.fila-agregar input{
+  flex:1; min-width:170px; height:40px; padding:0 11px; border:1px solid var(--line);
+  border-radius:9px; background:var(--panel); color:var(--ink); font-size:14px;
+}
+.fila-agregar .det{display:flex; flex:1; min-width:150px}
+.fila-agregar .det input{width:100%}
+
+.del-items{
+  border:1px solid var(--line); border-radius:11px; overflow:hidden; background:var(--panel2);
+}
+.del-vacio{padding:16px 12px; text-align:center; color:var(--muted); font-size:13px}
+.del-item{
+  display:flex; align-items:center; gap:10px; padding:8px 11px; border-bottom:1px solid var(--line2);
+  font-size:14px;
+}
+.del-item:last-child{border-bottom:0}
+.del-item .n{
+  flex:0 0 auto; min-width:26px; height:26px; padding:0 7px; border-radius:7px; background:var(--brand);
+  color:#fff; font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center;
+}
+.del-item .c{flex:1; min-width:0}
+.del-item .c b{display:block; font-weight:700; color:var(--ink)}
+.del-item .c .d{font-size:12.5px; color:var(--muted)}
+.del-item .precio{font-size:13px; color:var(--muted); white-space:nowrap}
+.del-item .quitar{
+  flex:0 0 auto; border:0; background:transparent; color:var(--muted);
+  cursor:pointer; font-size:16px; padding:0 3px; line-height:1;
+}
+.del-item .quitar:hover{color:var(--bad)}
+@media(max-width:640px){
+  .del-item .precio{display:none}
+}
+
+/* --- El envio se muestra aparte del descuento: es plata que entra, no que sale --- */
+.fila.envio b{color:var(--brand)}
+.fila.envio span{color:var(--muted)}
+.cobrar-envio{
+  font-size:12.5px; color:var(--muted); margin-top:2px;
+}
+.cobrar-envio b{color:var(--ink)}
+
+/* --- Ticket de comanda (impresion) --- */
+#ticket-comanda{display:none}
+@media print{
+  @page{margin:0}
+  html,body{overflow:visible !important; height:auto !important; background:#fff !important}
+  .topbar, main, .velo, #avisos{display:none !important}
+  /* Ver nota en #ticket: el ancho de pagina lo decide la impresora. */
+  #ticket, #ticket-caja, #ticket-comanda{display:none !important}
+  body[data-imprimir="comanda"] #ticket-comanda{display:block !important}
+  body[data-imprimir="comanda"] #ticket-comanda{
+    width:78mm; max-width:100%; margin:0 auto; padding:2mm 1mm;
+    color:#000; background:#fff;
+    font:12px/1.4 "Consolas", "Courier New", monospace;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  #ticket-comanda .tc-cab{text-align:center; border-bottom:1px dashed #000; padding-bottom:7px; margin-bottom:7px}
+  #ticket-comanda .tc-neg{font-size:16px; font-weight:bold; letter-spacing:.5px}
+  #ticket-comanda .tc-sub{font-size:10px; margin-top:2px}
+  #ticket-comanda .tc-cliente{font-size:20px; font-weight:bold; margin:9px 0 5px; text-transform:uppercase}
+  #ticket-comanda .tc-datos{font-size:11px; margin-bottom:7px; line-height:1.5}
+  #ticket-comanda .tc-obs{background:#eee; padding:5px 6px; font-size:11px; margin:5px 0; font-weight:bold}
+  #ticket-comanda .tc-l{width:100%; border-collapse:collapse; font-size:13px}
+  #ticket-comanda .tc-l td{padding:3px 0; vertical-align:top}
+  #ticket-comanda .tc-l .n{width:34px; font-weight:bold}
+  #ticket-comanda .tc-l .d{font-size:11px}
+  #ticket-comanda .tc-pie{border-top:1px dashed #000; margin-top:8px; padding-top:6px; font-size:10px; text-align:center}
+}
+
+/* ---- Comunes a los 3 tickets al imprimir ---- */
+@media print{
+  /* que una linea o un renglon no quede partido entre dos hojas */
+  #ticket tr, #ticket .mp, #ticket .lin,
+  #ticket-comanda tr, #ticket-comanda .tc-datos, #ticket-comanda .tc-obs,
+  #ticket-caja .lin, #ticket-caja .mp{ page-break-inside:avoid; break-inside:avoid }
+  /* repetir el encabezado de la tabla si el ticket se parte */
+  #ticket thead, #ticket-comanda thead{ display:table-header-group }
+  /* en ticket no tiene sentido mostrar el fondo gris de la app */
+  #ticket, #ticket-comanda, #ticket-caja{ box-shadow:none !important; border:0 !important }
 }

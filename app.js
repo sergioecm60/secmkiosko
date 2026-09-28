@@ -10,7 +10,45 @@
 const $  = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 
+/**
+ * Escucha un elemento sólo si existe. Un id que falta (por ejemplo en un rol
+ * que no ve esa pantalla) no debe dejar sin listeners a todo lo que viene
+ * después, así que los enlaces de la UI nueva usan esto.
+ */
+function escuchar(sel, evento, fn) {
+  const el = $(sel);
+  if (el) el.addEventListener(evento, fn);
+  return !!el;
+}
+
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * Lee un importe escrito a la argentina: "1.234,56", "1234,56", "1234.56"
+ * o "1234". Sirve para los campos donde el cajero teclea el efectivo contado.
+ */
+function parseNum(v) {
+  if (typeof v === "number") return r2(v);
+  let s = String(v == null ? "" : v).trim().replace(/[^\d,.\-]/g, "");
+  if (!s) return 0;
+  const ultimaComa = s.lastIndexOf(","), ultimoPunto = s.lastIndexOf(".");
+  if (ultimaComa > ultimoPunto) {
+    // La coma es el decimal: los puntos son separadores de miles.
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (ultimaComa !== -1 && ultimoPunto === -1) {
+    s = s.replace(",", ".");
+  } else {
+    s = s.replace(/,/g, "");
+  }
+  return r2(parseFloat(s) || 0);
+}
+
+/** Sólo la hora, para "abrió a las 14:05". */
+function horaDe(iso) {
+  if (!iso) return "—";
+  return new Date(String(iso).replace(" ", "T"))
+    .toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+}
 
 const esc = (s) => String(s == null ? "" : s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -18,6 +56,28 @@ const esc = (s) => String(s == null ? "" : s)
 
 /** Quita acentos y pasa a minúsculas para comparar sin sorpresas. */
 const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+/**
+ * Imprime SOLO el ticket indicado.
+ * Hay tres contenedores (#ticket, #ticket-caja, #ticket-comanda) y los tres
+ * tienen su propio bloque @media print. Si se dejara activo el de los demas,
+ * un ticket viejo quedaria impreso encima del nuevo, asi que se marca en
+ * <body data-imprimir="..."> y el CSS muestra unicamente ese.
+ * El ancho de pagina lo define la impresora: en una termica de 80mm el ticket
+ * sale a lo ancho y en una A4/Carta normal queda centrado con las mismas
+ * proporciones.
+ */
+function imprimirTicketAhora(clave) {
+  document.body.dataset.imprimir = clave;
+  const limpiar = () => {
+    delete document.body.dataset.imprimir;
+    window.removeEventListener("afterprint", limpiar);
+  };
+  window.addEventListener("afterprint", limpiar);
+  // afterprint no dispara en todos los navegadores: se limpia al volver a la app
+  if (!("onafterprint" in window)) setTimeout(limpiar, 1500);
+  setTimeout(() => window.print(), 60);
+}
 
 function dinero(n, simbolo) {
   const v = r2(n);
@@ -65,6 +125,51 @@ function numeroLocal(n, dec) {
     minimumFractionDigits: dec == null ? 0 : dec,
     maximumFractionDigits: dec == null ? 0 : dec
   });
+}
+
+const FRACCIONES = { 0.25: "¼", 0.5: "½", 0.75: "¾" };
+
+function esPeso(u) {
+  const s = String(u || "").trim().toLowerCase();
+  return s === "kg" || s === "g" || s === "gramo" || s === "kilo";
+}
+
+function esVolumen(u) {
+  const s = String(u || "").trim().toLowerCase();
+  return s === "litro" || s === "l" || s === "lt" || s === "ml";
+}
+
+/**
+ * Muestra una cantidad de la forma mas natural para el cliente.
+ *   0.25 kg   -> "250 g"      0.5 litro -> "500 ml"
+ *   2 kg      -> "2 kg"       2 litro   -> "2 L"
+ *   1 unidad  -> "1"          0         -> "0"
+ */
+function cantidadTxt(n, unidad) {
+  const v = Number(n) || 0;
+  const u = String(unidad || "pieza").trim();
+  const abs = Math.abs(v);
+  const peso = esPeso(u), vol = esVolumen(u);
+
+  if (peso || vol) {
+    const chico = redondearTxt(abs * 1000);
+    if (chico > 0 && enteroTxt(chico)) {
+      if (abs >= 1) return numCorto(abs) + (peso ? " kg" : " L");
+      return numeroLocal(chico, 0) + (peso ? " g" : " ml");
+    }
+  }
+  return numCorto(v);
+}
+
+function redondearTxt(n) { return Math.round(n * 1000) / 1000; }
+function enteroTxt(n) { return Math.abs(n - Math.round(n)) < 0.001; }
+
+/** Entero sin decimales, fractionado con 2 y sin ceros de sobra: 4,5 / 0,25. */
+function numCorto(v) {
+  if (!Number.isInteger(v)) {
+    return numeroLocal(v, 2).replace(/,00$/, "").replace(/,(\d)0$/, ",$1");
+  }
+  return numeroLocal(v, 0);
 }
 
 function aviso(msg, tipo) {
@@ -120,7 +225,15 @@ async function api(accion, datos) {
   }
   if (!res.ok || !json.ok) {
     if (json.instalar) { window.location.href = "instalar.php"; }
-    throw new Error(json.error || ("Error " + res.status));
+    // Sesión vencida o clave sin cambiar: de vuelta al login.
+    if (res.status === 401 || json.sesion || json.clave) {
+      window.location.href = "login.php";
+      throw new Error(json.error || "Sesión vencida.");
+    }
+    const err = new Error(json.error || ("Error " + res.status));
+    err.permiso = res.status === 403;
+    err.sinCaja = res.status === 409;
+    throw err;
   }
   return json;
 }
@@ -144,8 +257,27 @@ const estado = {
   mediosPago: [{ id: 1, nombre: "Efectivo", icono: "💵", referencia: false }],
   proveedores: [],
   editMedioId: null,
-  editProvId: null
+  editProvId: null,
+  /* --- comandas de cocina --- */
+  soyCocina: document.body.getAttribute("data-rol") === "cocina",
+  miRol: document.body.getAttribute("data-rol") || "vendedor",
+  comanda: null,        // la comanda armada en el modal de delivery
+  atajos: [],
+  zonas: [],
+  cocFiltro: "pendiente",
+  cocTimer: null,
+  /* --- sesión, rol y caja --- */
+  yo: null,
+  soyAdmin: document.body.getAttribute("data-rol") === "admin",
+  caja: null,          // la caja abierta ahora mismo, o null
+  cajas: [],
+  usuarios: []
 };
+
+/** ¿Puede este usuario administrar el catálogo? */
+function esAdmin() { return !!estado.soyAdmin; }
+function esCocina() { return !!estado.soyCocina; }
+function puedeVender() { return esAdmin() || estado.miRol === "vendedor"; }
 
 const prodPorId = (id) => estado.productos.find(p => p.id === Number(id)) || null;
 
@@ -186,34 +318,108 @@ function fotoHTML(p, clase) {
 /* =====================================================================
    4. CARRITO
    ===================================================================== */
-function agregar(id, cantidad) {
+function agregar(id, cantidad, formatoId) {
   const p = prodPorId(id);
   if (!p) { aviso("Ese producto ya no existe.", "mal"); return; }
-  if (p.stock <= 0) aviso("⚠️ " + p.nombre + " está agotado. Se registra igual y el stock queda en negativo.", "aviso-w");
-  else if (p.minimo > 0 && p.stock - (cantidad || 1) <= p.minimo) {
-    aviso("Quedan solo " + numeroLocal(p.stock, 0) + " de " + p.nombre + ".", "aviso-w");
+  cantidad = cantidad === undefined || cantidad === null ? 1 : cantidad;
+
+  // El formato elegida define el precio y cuantas unidades base se descuentan.
+  // Sin eleccion explicita se usa el predeterminado del producto.
+  const formatos = p.formatos_venta || [];
+  let fmt = null;
+  if (formatoId !== undefined && formatoId !== null && Number(formatoId) > 0) {
+    fmt = formatos.find(f => f.id === Number(formatoId));
+    if (!fmt) { aviso("Ese formato ya no existe.", "mal"); return; }
+  } else if (formatos.length) {
+    fmt = formatos.find(f => f.predet) || formatos[0];
+  }
+  const factor = fmt ? (Number(fmt.factor) || 1) : 1;
+  const precio = fmt && Number(fmt.precio_final) > 0 ? Number(fmt.precio_final) : p.precio;
+  const baseCant = r2(cantidad * factor);
+  const formatoIdFinal = fmt ? fmt.id : 0;
+
+  // La venta libre no lleva control de existencias: no se agota y no avisa.
+  if (!p.sin_stock) {
+    if (p.stock <= 0) aviso("⚠️ " + p.nombre + " está agotado. Se registra igual y el stock queda en negativo.", "aviso-w");
+    else if (p.minimo > 0 && p.stock - baseCant <= p.minimo) {
+      aviso("Quedan solo " + cantidadTxt(p.stock, p.unidad) + " de " + p.nombre + ".", "aviso-w");
+    }
   }
 
-  const linea = estado.carrito.find(l => l.id === p.id);
-  if (linea) linea.cantidad = r2(linea.cantidad + (cantidad || 1));
-  else estado.carrito.push({ id: p.id, nombre: p.nombre, precio: p.precio, cantidad: r2(cantidad || 1) });
+  // Una linea por producto + formato: "2 unidades" y "1 docena" van separadas.
+  const linea = estado.carrito.find(l => l.id === p.id && (l.formato_id || 0) === formatoIdFinal);
+  if (linea) linea.cantidad = r2(linea.cantidad + cantidad);
+  else estado.carrito.push({
+    id: p.id, formato_id: formatoIdFinal, nombre: p.nombre, precio,
+    cantidad: r2(cantidad), factor,
+    unidad: p.unidad || "pieza",
+    formato: fmt ? fmt.unidad : null,
+    // Se mandan tambien nombre y cantidad: si el producto se guarda y cambia
+    // el id del formato, la venta lo reconoce igual.
+    formato_unidad: fmt ? fmt.unidad : null,
+    formato_factor: factor,
+    stock: p.stock
+  });
 
   renderCarrito();
   $("#txt-buscar").value = "";
   $("#txt-buscar").focus();
 }
 
-function cambiarCantidad(id, delta) {
-  const l = estado.carrito.find(x => x.id === Number(id));
+function cambiarCantidad(id, delta, formatoId) {
+  const fId = Number(formatoId) || 0;
+  const l = estado.carrito.find(x => x.id === Number(id) && (x.formato_id || 0) === fId);
   if (!l) return;
   l.cantidad = r2(l.cantidad + delta);
-  if (l.cantidad <= 0) estado.carrito = estado.carrito.filter(x => x.id !== l.id);
+  if (l.cantidad <= 0) quitarLinea(l.id, fId);
+  else renderCarrito();
+}
+
+/** Cambia el formato de una linea conservando la cantidad. */
+function cambiarFormato(id, formatoId) {
+  const fId = Number(formatoId) || 0;
+  const linea = estado.carrito.find(x => x.id === Number(id) && (x.formato_id || 0) !== fId);
+  if (!linea) return;
+  const p = prodPorId(linea.id);
+  if (!p) { quitarLinea(linea.id, linea.formato_id); return; }
+  const fmt = (p.formatos_venta || []).find(f => f.id === fId);
+  if (!fmt) return;
+
+  // Si ya habia una linea con ese formato, se fusionan las cantidades.
+  const destino = estado.carrito.find(x => x.id === linea.id && (x.formato_id || 0) === fId);
+  if (destino) {
+    destino.cantidad = r2(destino.cantidad + linea.cantidad);
+    estado.carrito = estado.carrito.filter(x => x !== linea);
+  } else {
+    linea.formato_id = fId;
+    linea.precio = Number(fmt.precio_final) > 0 ? Number(fmt.precio_final) : p.precio;
+    linea.factor = Number(fmt.factor) || 1;
+    linea.formato = fmt.unidad;
+  }
   renderCarrito();
 }
 
-function quitarLinea(id) {
-  estado.carrito = estado.carrito.filter(x => x.id !== Number(id));
+function quitarLinea(id, formatoId) {
+  const fId = formatoId === undefined ? null : Number(formatoId);
+  estado.carrito = estado.carrito.filter(x =>
+    !(x.id === Number(id) && (fId === null || (x.formato_id || 0) === fId)));
   renderCarrito();
+}
+
+/** Los +/- van de a 1 formato (1 maple, 1 docena, 1 kg...). */
+function pasoBase(l) { return 1; }
+
+/** Chips con los formatos de venta del producto (docena, 2x1, 250 g...). */
+function presetsHTML(l) {
+  const p = prodPorId(l.id);
+  const formatos = (p && p.formatos_venta) || [];
+  if (formatos.length < 2) return "";
+  return '<div class="chips">' + formatos.map(f => {
+    const sel = (f.id === (l.formato_id || 0));
+    const etq = f.unidad + (Number(f.factor) !== 1 ? " (" + cantidadTxt(Number(f.factor), p.unidad) + ")" : "");
+    const pr = Number(f.precio_final) > 0 ? " · " + dinero(Number(f.precio_final)) : "";
+    return `<button class="chip ${sel ? "on" : ""}" data-fmt-linea="${l.id}" data-fmt-nuevo="${f.id}" data-fmt-actual="${l.formato_id || 0}">${esc(etq + pr)}</button>`;
+  }).join("") + "</div>";
 }
 
 function vaciarCarrito() {
@@ -223,8 +429,11 @@ function vaciarCarrito() {
 }
 
 const subtotalCarrito = () => r2(estado.carrito.reduce((s, l) => s + l.precio * l.cantidad, 0));
-const totalCarrito   = () => r2(Math.max(0, subtotalCarrito() - estado.descuento));
-const piezasCarrito  = () => estado.carrito.reduce((s, l) => s + l.cantidad, 0);
+/** El costo de envío de la comanda se suma al total de la venta. */
+const envioComanda    = () => r2(estado.comanda && estado.comanda.tipo === "delivery" ? (estado.comanda.envio || 0) : 0);
+const totalCarrito    = () => r2(Math.max(0, subtotalCarrito() - estado.descuento) + envioComanda());
+// Piezas en unidad base, que es como se descuenta del stock.
+const piezasCarrito  = () => r2(estado.carrito.reduce((s, l) => s + l.cantidad * (l.factor || 1), 0));
 
 function renderCarrito() {
   const cont = $("#carrito-items");
@@ -234,30 +443,42 @@ function renderCarrito() {
       + '<div class="ico">🛒</div><h3>El ticket está vacío</h3>'
       + '<p>Toca un producto de la izquierda o escanea su código.</p></div>';
   } else {
-    cont.innerHTML = estado.carrito.map(l => `
-      <div class="item">
+    cont.innerHTML = estado.carrito.map(l => {
+      const baseCant = r2(l.cantidad * (l.factor || 1));
+      const equiv = (l.factor || 1) !== 1
+        ? ` · ${esc(cantidadTxt(baseCant, l.unidad))}` : "";
+      return `
+      <div class="item" data-linea="${l.id}" data-fmt="${l.formato_id || 0}">
         <div class="info">
           <div class="n" title="${esc(l.nombre)}">${esc(l.nombre)}</div>
-          <div class="p">${dinero(l.precio)} c/u</div>
+          <div class="p">${dinero(l.precio)}${l.formato ? " c/u " + esc(l.formato) : " c/u"}${equiv}</div>
+          <div class="presets-linea">${presetsHTML(l)}</div>
         </div>
         <div class="cant">
-          <button data-menos="${l.id}" title="Quitar uno">−</button>
-          <input type="number" step="1" min="0" value="${l.cantidad}" data-cant="${l.id}" aria-label="Cantidad">
-          <button data-mas="${l.id}" title="Agregar uno">+</button>
+          <button data-menos="${l.id}" data-menos-fmt="${l.formato_id || 0}" title="Quitar uno">−</button>
+          <input type="number" step="0.01" min="0" value="${l.cantidad}" data-cant="${l.id}" data-cant-fmt="${l.formato_id || 0}" aria-label="Cantidad">
+          <button data-mas="${l.id}" data-mas-fmt="${l.formato_id || 0}" title="Agregar uno">+</button>
         </div>
         <div class="imp">${dinero(l.precio * l.cantidad)}</div>
-        <button class="quitar" data-quitar="${l.id}" title="Quitar la línea">✕</button>
-      </div>`).join("");
+        <button class="quitar" data-quitar="${l.id}" data-quitar-fmt="${l.formato_id || 0}" title="Quitar la línea">✕</button>
+      </div>`;
+    }).join("");
   }
 
   const sub = subtotalCarrito();
   const tot = totalCarrito();
-  $("#c-count").textContent = piezasCarrito();
+  const env = envioComanda();
+  $("#c-count").textContent = estado.carrito.length;
   $("#c-sub").textContent = dinero(sub);
   $("#c-total").textContent = dinero(tot);
   $("#fila-desc").style.display = estado.descuento > 0 ? "" : "none";
   $("#c-desc").textContent = "−" + dinero(estado.descuento);
-  $("#btn-cobrar").disabled = estado.carrito.length === 0;
+  const filaEnv = $("#c-envio");
+  if (filaEnv) {
+    filaEnv.hidden = env <= 0;
+    if (env > 0) $("#c-envio-val").textContent = "+" + dinero(env);
+  }
+  renderBotonCobrar();
 }
 
 /* =====================================================================
@@ -310,15 +531,19 @@ function renderGrid() {
   }
 
   cont.innerHTML = lista.map(p => {
+    // Venta libre: no hay existencias que valgan, asi que ni "agotado" ni
+    // "sin stock": el producto se cobra siempre.
+    const libre = !!p.sin_stock;
     const e = estadoStock(p);
-    const marca = p.stock <= 0 ? '<span class="marca">agotado</span>'
-      : (p.minimo > 0 && p.stock <= p.minimo ? '<span class="marca bajo">bajo</span>' : "");
-    return `<div class="prod${p.stock <= 0 ? " sin-stock" : ""}" data-prod="${p.id}" title="${esc(p.nombre)}">
+    const marca = libre ? '<span class="marca libre">a pedido</span>'
+      : (p.stock <= 0 ? '<span class="marca">agotado</span>'
+      : (p.minimo > 0 && p.stock <= p.minimo ? '<span class="marca bajo">bajo</span>' : ""));
+    return `<div class="prod${!libre && p.stock <= 0 ? " sin-stock" : ""}" data-prod="${p.id}" title="${esc(p.nombre)}">
       ${marca}
       ${fotoHTML(p, "foto")}
       <div class="nom">${esc(p.nombre)}</div>
       <div class="prez">${dinero(p.precio)}</div>
-      <div class="stk">${p.stock > 0 ? numeroLocal(p.stock, 0) + " " + esc(p.unidad || "pieza") : "sin stock"}</div>
+      <div class="stk">${libre ? "sin control de stock" : (p.stock > 0 ? esc(cantidadTxt(p.stock, p.unidad)) : "sin stock")}</div>
     </div>`;
   }).join("");
 }
@@ -334,6 +559,14 @@ function renderPOS() {
    ===================================================================== */
 function abrirCobro() {
   if (!estado.carrito.length) { aviso("El ticket está vacío.", "aviso-w"); return; }
+  // Sin caja abierta no hay cobro: cada venta tiene que pertenecer a un turno
+  // para que al cerrar la caja se pueda conciliar.
+  if (!estado.caja) {
+    aviso("No tenés una caja abierta. Abrila antes de cobrar.", "aviso-w");
+    ir("cajas");
+    setTimeout(abrirModalAbrirCaja, 120);
+    return;
+  }
   const tot = totalCarrito();
   const metodos = estado.mediosPago.length
     ? estado.mediosPago
@@ -368,6 +601,15 @@ function refrescarCobro() {
   const efectivo = metodo ? !!metodo.efectivo : true;
   $("#cob-efectivo").style.display = efectivo ? "" : "none";
   $("#cob-otro").style.display = efectivo ? "none" : "";
+  const env = envioComanda();
+  const filaEnv = $("#cob-envio-fila");
+  if (filaEnv) {
+    filaEnv.hidden = env <= 0;
+    if (env > 0) {
+      const z = estado.zonas.find(x => x.id === (estado.comanda.zona_id || 0));
+      $("#cob-envio-detalle").textContent = dinero(env) + (z ? " · " + z.nombre : "");
+    }
+  }
   if (!efectivo) { $("#cob-confirmar").disabled = false; return; }
 
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
@@ -404,26 +646,46 @@ async function confirmarVenta() {
   const efectivo = metodo ? !!metodo.efectivo : true;
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
 
+  // La comanda viaja con la venta: se guardan juntas o no se guarda ninguna.
+  let comanda = null;
+  if (estado.comanda && estado.comanda.items.length) {
+    const c = estado.comanda;
+    comanda = {
+      cliente: c.cliente, telefono: c.telefono, direccion: c.direccion,
+      zona_id: c.zona_id || 0, tipo: c.tipo, lugar: c.lugar, notas: c.notas,
+      items: c.items.map(it => ({
+        texto: it.texto, detalle: it.detalle, producto_id: it.producto_id || 0, cantidad: it.cantidad
+      }))
+    };
+  }
+
   try {
     const r = await api("venta_crear", {
-      items: estado.carrito.map(l => ({ id: l.id, cantidad: l.cantidad, precio: l.precio })),
+      items: itemsParaVenta(),
       descuento: estado.descuento,
       metodo: estado.metodoCobro,
+      medio_pago_id: metodo ? metodo.id : 0,
       recibido: efectivo ? recibido : -1,
       vuelto: efectivo ? r2(recibido - totalCarrito()) : 0,
-      referencia: $("#cob-ref").value.trim()
+      referencia: $("#cob-ref").value.trim(),
+      comanda: comanda
     });
 
     cerrarModal("#m-cobro");
     vaciarCarrito();
+    estado.comanda = null;
+    renderBotonCobrar();
     estado.ultimaVenta = r.venta;
 
     if (r.sin_stock && r.sin_stock.length) {
       aviso("⚠️ Quedó en negativo: " + r.sin_stock.join(", "), "aviso-w");
     }
+    if (r.comanda_id) {
+      aviso("Comanda #" + r.comanda_id + " enviada a cocina.", "ok");
+    }
 
     mostrarVenta(r.venta, true);
-    await Promise.all([cargarProductos(), refrescarCabecera()]);
+    await Promise.all([cargarProductos(), refrescarCabecera(), refrescarMiCaja()]);
     $("#txt-buscar").focus();
   } catch (e) {
     aviso("No se pudo guardar: " + e.message, "mal");
@@ -432,6 +694,404 @@ async function confirmarVenta() {
     btn.textContent = "✓ Confirmar venta";
     refrescarCobro();
   }
+}
+
+/* =====================================================================
+   6b. COMANDAS DE COCINA
+   El pedido se cobra como una venta normal y ademas queda la comanda:
+   lo que cocina tiene que preparar y a quien entregarselo.
+   ===================================================================== */
+const ETIQUETA_TIPO = { delivery: "🛵 Delivery", retiro: "🏠 Retiro", mesa: "🍽 Mesa" };
+const ETIQUETA_ESTADO = {
+  pendiente: "Nueva", preparando: "Preparando", listo: "Lista",
+  entregado: "Entregada", cancelado: "Cancelada"
+};
+
+/* ---------- Modal de delivery ---------- */
+
+function abrirDelivery() {
+  if (!estado.comanda) {
+    estado.comanda = {
+      cliente: "", telefono: "", direccion: "", zona_id: 0, envio: 0,
+      tipo: "delivery", lugar: "", notas: "", items: []
+    };
+  }
+  const c = estado.comanda;
+  $("#del-cliente").value = c.cliente || "";
+  $("#del-telefono").value = c.telefono || "";
+  $("#del-direccion").value = c.direccion || "";
+  $("#del-lugar").value = c.lugar || "";
+  $("#del-notas").value = c.notas || "";
+  $("#del-texto").value = "";
+  $("#del-detalle").value = "";
+  $$("#del-tipo button").forEach(b => b.classList.toggle("on", b.dataset.tipo === c.tipo));
+  actualizarCamposDelivery();
+  renderZonas();
+  renderAtajos();
+  renderItemsDelivery();
+  abrirModal("#m-delivery");
+  setTimeout(() => $("#del-cliente").focus(), 120);
+}
+
+/** Muestra sólo los campos que aplican al tipo de pedido elegido. */
+function actualizarCamposDelivery() {
+  const t = estado.comanda.tipo;
+  $("#del-zona-campos").style.display = t === "delivery" ? "" : "none";
+  $("#del-dir-campo").style.display = t === "delivery" ? "" : "none";
+  $("#del-lugar-campo").style.display = t === "mesa" ? "" : "none";
+}
+
+function renderZonas() {
+  const sel = $("#del-zona");
+  const id = String(estado.comanda.zona_id || 0);
+  sel.innerHTML = '<option value="0">— sin zona —</option>'
+    + estado.zonas.map(z => '<option value="' + z.id + '">' + esc(z.nombre) + " — " + dinero(z.costo) + "</option>").join("");
+  sel.value = id;
+  aplicarZona();
+}
+
+/** El costo sale de la zona configurada; el navegador no lo puede cambiar. */
+function aplicarZona() {
+  const c = estado.comanda;
+  const id = Number($("#del-zona").value) || 0;
+  c.zona_id = id;
+  const z = estado.zonas.find(x => x.id === id);
+  const costo = z ? Number(z.costo) || 0 : 0;
+  c.envio = costo;
+  $("#del-envio").value = dinero(z ? costo : 0);
+  // El total del ticket incluye el envio: hay que repintarlo.
+  renderCarrito();
+}
+
+/** Cambiar el tipo puede dejar el envio en cero (retiro y mesa no se reparten). */
+function refrescarEnvio() {
+  const c = estado.comanda;
+  // Se relee el costo de la zona: si veniamos de retiro, el valor sigue ahi.
+  const z = estado.zonas.find(x => x.id === (c.zona_id || 0));
+  c.envio = c.tipo === "delivery" && z ? Number(z.costo) || 0 : 0;
+  $("#del-envio").value = dinero(c.envio);
+  renderCarrito();
+}
+
+/* ---------- Atajos ---------- */
+
+function renderAtajos() {
+  if (!estado.atajos.length) {
+    $("#del-atajos").innerHTML = '<p class="parrafo" style="margin:0">No hay atajos cargados. Cargalos en Ajustes → Comandas de cocina.</p>';
+    return;
+  }
+  // Se agrupan por sección, en el orden en que vinieron.
+  const secciones = [];
+  estado.atajos.forEach(a => {
+    if (!secciones.some(s => s.nombre === a.seccion)) secciones.push({ nombre: a.seccion, lista: [] });
+    secciones.find(s => s.nombre === a.seccion).lista.push(a);
+  });
+  $("#del-atajos").innerHTML = secciones.map(s => `
+    <div class="atajo-sec"><span class="t">${esc(s.nombre)}</span><span class="ln"></span></div>
+    <div class="atajo-botones">${s.lista.map(a => `
+      <button class="atajo${a.producto_id ? " con-producto" : ""}" data-atajo="${a.id}"
+              title="${esc(a.texto || "")}${a.producto_id ? " · se cobra" : " · sólo texto"}">
+        ${esc(a.etiqueta)}${a.producto_id ? '<span class="pt">$</span>' : ""}
+      </button>`).join("")}</div>`).join("");
+}
+
+/**
+ * Un atajo con producto lo mete al carrito (se cobra y descuenta stock) y
+ * además anota la línea para cocina. Uno sin producto es sólo texto.
+ */
+function usarAtajo(id) {
+  const a = estado.atajos.find(x => x.id === Number(id));
+  if (!a) return;
+  let texto = a.texto;
+  let detalle = a.detalle || null;
+
+  if (a.producto_id) {
+    const p = prodPorId(a.producto_id);
+    if (!p) { aviso("El producto de ese atajo ya no existe.", "mal"); return; }
+    // Formato puntual (por ejemplo "botella de 2 y cuarto"): si existe, se usa.
+    let fmtId = 0;
+    if (a.formato_unidad) {
+      const f = (p.formatos_venta || []).find(x => norm(x.unidad) === norm(a.formato_unidad));
+      if (f) fmtId = f.id;
+    }
+    agregar(a.producto_id, 1, fmtId);
+    if (!texto) texto = p.nombre;
+  }
+  if (!texto) { aviso("Ese atajo no tiene texto para cocina.", "mal"); return; }
+
+  agregarItemComanda({ texto, detalle, producto_id: a.producto_id || 0, cantidad: 1 });
+  $("#del-texto").value = "";
+  $("#del-detalle").value = "";
+  $("#del-detalle-wrap").hidden = true;
+}
+
+function agregarItemComanda(item) {
+  estado.comanda.items.push({
+    texto: item.texto, detalle: item.detalle || null,
+    producto_id: item.producto_id || 0, cantidad: Number(item.cantidad) || 1
+  });
+  renderItemsDelivery();
+}
+
+/* ---------- Lineas de la comanda ---------- */
+
+function renderItemsDelivery() {
+  const items = estado.comanda.items;
+  $("#del-count").textContent = items.length;
+  $("#del-guardar").disabled = items.length === 0;
+  if (!items.length) {
+    $("#del-items").innerHTML = '<div class="del-vacio">Todavía no hay nada que preparar.<br>Tocá un atajo de arriba o escribí una línea.</div>';
+    return;
+  }
+  $("#del-items").innerHTML = items.map((it, i) => {
+    // Si el atajo tira de un producto, se muestra cuanto suma al ticket.
+    let precio = "";
+    if (it.producto_id) {
+      const linea = estado.carrito.find(l => l.id === it.producto_id);
+      if (linea) precio = dinero(linea.precio * linea.cantidad);
+    }
+    return `<div class="del-item">
+      <span class="n">${it.cantidad}</span>
+      <span class="c"><b>${esc(it.texto)}</b>${it.detalle ? '<span class="d">' + esc(it.detalle) + "</span>" : ""}</span>
+      <span class="precio">${precio}</span>
+      <button class="quitar" data-quitar-com="${i}" title="Sacar de la comanda">✕</button>
+    </div>`;
+  }).join("");
+}
+
+/** El botón de cobrar se enciende con el carrito: la comanda viaja con la venta. */
+function renderBotonCobrar() {
+  const hayCarrito = estado.carrito.length > 0;
+  const hayComanda = !!(estado.comanda && estado.comanda.items.length);
+  const btn = $("#btn-cobrar");
+  if (btn) btn.disabled = !hayCarrito;
+  const av = $("#comanda-aviso");
+  if (av) {
+    av.hidden = !hayComanda;
+    if (hayComanda) $("#comanda-cliente").textContent = estado.comanda.cliente || "(sin nombre)";
+  }
+}
+
+function leerCamposDelivery() {
+  const c = estado.comanda;
+  c.cliente  = $("#del-cliente").value.trim();
+  c.telefono = $("#del-telefono").value.trim();
+  c.direccion = $("#del-direccion").value.trim();
+  c.lugar    = $("#del-lugar").value.trim();
+  c.notas    = $("#del-notas").value.trim();
+}
+
+/** El precio de la comanda de texto libre no se cobra: es sólo instrucción. */
+function itemsParaVenta() {
+  return estado.carrito.map(l => ({
+    id: l.id,
+    formato_id: l.formato_id || 0,
+    formato_unidad: l.formato_unidad || null,
+    formato_factor: l.formato_factor || 1,
+    cantidad: l.cantidad,
+    precio: l.precio
+  }));
+}
+
+/* ---------- Tablero de cocina ---------- */
+
+async function cargarComandas() {
+  const cerrado = estado.cocFiltro === "cerradas";
+  const r = await api("comandas", cerrado ? { incluir: "cerradas" } : undefined);
+  const todas = r.comandas || [];
+  const cuenta = { pendiente: 0, preparando: 0, listo: 0, entregado: 0, cancelado: 0 };
+  todas.forEach(c => { cuenta[c.estado] = (cuenta[c.estado] || 0) + 1; });
+  ["pendiente", "preparando", "listo"].forEach(e => {
+    const el = $("#coc-n-" + e);
+    if (el) el.textContent = cuenta[e] || 0;
+  });
+  const pend = cuenta.pendiente || 0;
+  const badge = $("#coc-pend");
+  badge.hidden = pend === 0;
+  badge.textContent = pend;
+
+  renderTablero(todas, cerrado);
+}
+
+/**
+ * La cocina no está mirando la pantalla todo el rato, así que el tablero se
+ * refresca solo. Sólo corre mientras la vista está abierta.
+ */
+function arrancarPollingCocina() {
+  clearInterval(estado.cocTimer);
+  estado.cocTimer = setInterval(() => {
+    if (estado.vista === "cocina" && !document.hidden) {
+      cargarComandas().catch(() => {});
+    }
+  }, 12000);
+}
+
+function renderTablero(todas, cerrado) {
+  const cont = $("#coc-tablero");
+  if (cerrado) {
+    const f = todas.filter(c => c.estado === "entregado" || c.estado === "cancelado");
+    if (!f.length) {
+      cont.innerHTML = vacioCocina("📭", "Todavía no hay pedidos entregados.");
+      return;
+    }
+    cont.innerHTML = f.map(c => tarjetaComanda(c, true)).join("");
+    return;
+  }
+  const lista = todas.filter(c => c.estado === estado.cocFiltro);
+  if (!lista.length) {
+    const msj = {
+      pendiente: ["👌", "No hay pedidos nuevos. La cocina está al día."],
+      preparando: ["🔥", "No hay nada preparándose."],
+      listo: ["📣", "No hay pedidos listos para entregar."]
+    }[estado.cocFiltro] || ["🍳", "Nada por acá."];
+    cont.innerHTML = vacioCocina(msj[0], msj[1]);
+    return;
+  }
+  cont.innerHTML = lista.map(c => tarjetaComanda(c, false)).join("");
+}
+
+function vacioCocina(ic, txt) {
+  return '<div class="coc-vacia"><span class="ic">' + ic + "</span>" + esc(txt) + "</div>";
+}
+
+function minutosDe(iso) {
+  const t = new Date(String(iso).replace(" ", "T"));
+  if (isNaN(t)) return 0;
+  return Math.max(0, Math.floor((Date.now() - t.getTime()) / 60000));
+}
+
+function tarjetaComanda(c, historico) {
+  const min = minutosDe(c.creado);
+  // El color de la cabecera avisa de urgencia sin que nadie tenga que leer la hora.
+  const urgente = !historico && (c.estado === "pendiente" ? min >= 12 : c.estado === "preparando" ? min >= 25 : false);
+  const claseEstado = c.estado === "entregado" ? "entregado" : c.estado === "cancelado" ? "cancelado" : c.estado;
+  const reloj = c.estado === "pendiente" && min >= 12 ? '<span class="etq mal">' + min + " min</span>"
+    : c.estado === "preparando" && min >= 25 ? '<span class="etq mal">' + min + " min</span>"
+    : '<span class="etq neutro">' + min + " min</span>";
+
+  const datos = [];
+  if (c.telefono) datos.push(["📞", esc(c.telefono)]);
+  if (c.direccion) datos.push(["📍", esc(c.direccion)]);
+  if (c.zona_nombre) datos.push(["🗺", esc(c.zona_nombre) + (Number(c.zona_id) > 0 && Number(c.envio) > 0 ? " · envío " + dinero(Number(c.envio)) : "")]);
+  if (c.lugar) datos.push(["🍽", esc(c.lugar)]);
+
+  const items = c.items.map(it => `
+    <li class="com-item${it.estado === "listo" ? " listo" : ""}">
+      <button class="chk" data-item-com="${it.id}" title="Marcar como listo">✓</button>
+      <span class="txt">
+        <b>${numeroLocal(it.cantidad, 0)}</b> ${esc(it.texto)}
+        ${it.detalle ? '<span class="det">' + esc(it.detalle) + "</span>" : ""}
+        ${it.es_producto ? '<span class="cobra">· cobrado</span>' : ""}
+      </span>
+    </li>`).join("");
+
+  let pie = "";
+  if (!historico && c.estado !== "cancelado") {
+    if (c.estado === "pendiente") {
+      pie = '<button class="btn pri" data-estado-com="preparando">🔥 Empezar</button>';
+    } else if (c.estado === "preparando") {
+      pie = '<button class="btn ok" data-estado-com="listo">✅ Listo</button>'
+          + '<button class="btn" data-estado-com="pendiente">↩ Volver a nueva</button>';
+    } else if (c.estado === "listo") {
+      pie = '<button class="btn ok" data-estado-com="entregado">🛵 Entregado</button>'
+          + '<button class="btn" data-estado-com="preparando">↩ Volver</button>';
+    }
+    pie += '<button class="btn sm" data-print-com="' + c.id + '" title="Imprimir la comanda">🖨</button>'
+        + (esAdmin() ? '<button class="btn sm peligro" data-estado-com="cancelado" title="Cancelar">✕</button>' : "");
+  }
+
+  return `<article class="comanda ${claseEstado}${urgente ? " urgente" : ""}" data-comanda="${c.id}">
+    <div class="com-cab">
+      <div class="com-quien">
+        <div class="com-cliente">${esc(c.cliente)}</div>
+        <div class="com-meta">
+          <span class="com-tipo ${c.tipo}">${ETIQUETA_TIPO[c.tipo] || c.tipo}</span>
+          <span>${ETIQUETA_ESTADO[c.estado] || c.estado}</span>
+          ${reloj}
+        </div>
+      </div>
+      <span class="com-id">#${c.id}${c.folio ? " · f" + c.folio : ""}</span>
+    </div>
+    ${datos.length ? '<div class="com-datos">' + datos.map(d =>
+      '<div class="d"><span class="ic">' + d[0] + "</span><span>" + d[1] + "</span></div>").join("") + "</div>" : ""}
+    <ul class="com-items">${items}</ul>
+    ${c.notas ? '<div class="com-notas">⚠️ ' + esc(c.notas) + "</div>" : ""}
+    ${historico ? "" : '<div class="com-total">Total <b>' + dinero(c.total) + "</b></div>"}
+    ${pie ? '<div class="com-pie">' + pie + "</div>" : ""}
+  </article>`;
+}
+
+async function moverComanda(id, nuevo) {
+  const r = await api("comanda_estado", { id, estado: nuevo });
+  aplicarComanda(r.comanda);
+  aviso("Comanda #" + id + " → " + (ETIQUETA_ESTADO[nuevo] || nuevo), "ok");
+}
+
+async function marcarItem(idItem) {
+  const el = document.querySelector('[data-item-com="' + idItem + '"]');
+  const marcar = !el || !el.closest(".com-item").classList.contains("listo");
+  const r = await api("comanda_item", { id_item: idItem, estado: marcar ? "listo" : "pendiente" });
+  aplicarComanda(r.comanda);
+}
+
+/** Reemplaza la tarjeta en el tablero sin volver a pedir todo. */
+function aplicarComanda(c) {
+  if (!c) return;
+  const article = document.querySelector('[data-comanda="' + c.id + '"]');
+  if (!article) { cargarComandas(); return; }
+  const tmp = document.createElement("div");
+  tmp.innerHTML = tarjetaComanda(c, estado.cocFiltro === "cerradas");
+  const nuevo = tmp.firstElementChild;
+  nuevo.className += " recien";
+  article.replaceWith(nuevo);
+  if (c.estado !== estado.cocFiltro && estado.cocFiltro !== "cerradas") {
+    nuevo.style.opacity = "0";
+    nuevo.style.transform = "scale(.96)";
+    setTimeout(() => nuevo.remove(), 220);
+  }
+  // Los conteos de las pestañas hay que refrescarlos igual.
+  const r = api("comandas", { incluir: "cerradas" }).then(x => {
+    (x.comandas || []).forEach(k => {
+      const el = $("#coc-n-" + k.estado);
+      if (el) el.textContent = 0;   // se recalcula abajo
+    });
+    const cuenta = {};
+    (x.comandas || []).forEach(k => { cuenta[k.estado] = (cuenta[k.estado] || 0) + 1; });
+    ["pendiente", "preparando", "listo"].forEach(e => {
+      const el = $("#coc-n-" + e);
+      if (el) el.textContent = cuenta[e] || 0;
+    });
+  }).catch(() => {});
+}
+
+/* ---------- Ticket de cocina ---------- */
+
+function imprimirComanda(id) {
+  const cont = $("#ticket-comanda");
+  api("comanda", { id }).then(r => {
+    const c = r.comanda;
+    const min = minutosDe(c.creado);
+    const filas = c.items.map(it =>
+      "<tr><td class='n'>" + numeroLocal(it.cantidad, 0) + "</td><td>"
+      + esc(it.texto) + (it.detalle ? "<br><span class='d'>" + esc(it.detalle) + "</span>" : "")
+      + "</td></tr>").join("");
+    const datos = [];
+    if (c.telefono) datos.push("Tel: " + esc(c.telefono));
+    if (c.direccion) datos.push("Dom: " + esc(c.direccion));
+    if (c.zona_nombre) datos.push("Zona: " + esc(c.zona_nombre));
+    if (c.lugar) datos.push("Mesa: " + esc(c.lugar));
+    cont.innerHTML = `
+      <div class="tc-cab">
+        <div class="tc-neg">COMANDA #${c.id}</div>
+        <div class="tc-sub">${ETIQUETA_TIPO[c.tipo] || c.tipo} · ${esc(ETIQUETA_ESTADO[c.estado] || c.estado)} · ${min} min</div>
+      </div>
+      <div class="tc-cliente">${esc(c.cliente)}</div>
+      ${datos.length ? '<div class="tc-datos">' + datos.join("<br>") + "</div>" : ""}
+      ${c.notas ? '<div class="tc-obs">⚠ ' + esc(c.notas) + "</div>" : ""}
+      <table class="tc-l">${filas}</table>
+      <div class="tc-pie">Pedido folio ${c.folio || "—"} · pagado<br>${esc(estado.config.negocio || "")}</div>`;
+    imprimirTicketAhora("comanda");
+  }).catch(e => aviso("No se pudo imprimir: " + e.message, "mal"));
 }
 
 /* =====================================================================
@@ -477,8 +1137,8 @@ function renderProductos() {
       <td class="num">${dinero(p.precio)}</td>
       <td class="num fuente">${p.costo > 0 ? dinero(p.costo) : "—"}</td>
       <td class="num"><span class="etq ${etqMargen}">${p.costo > 0 ? numeroLocal(margen, 1) + "%" : "—"}</span></td>
-      <td class="num"><strong>${numeroLocal(p.stock, 0)}</strong> <span class="fuente">${esc(p.unidad || "")}</span></td>
-      <td>${p.minimo > 0 ? numeroLocal(p.minimo, 0) : "—"}</td>
+      <td class="num"><strong>${esc(cantidadTxt(p.stock, p.unidad))}</strong></td>
+      <td>${p.minimo > 0 ? esc(cantidadTxt(p.minimo, p.unidad)) : "—"}</td>
       <td><span class="etq ${e.clase}">${e.texto}</span></td>
       <td class="acciones">
         <button class="btn sm" data-editar="${p.id}" title="Editar">✎</button>
@@ -540,6 +1200,7 @@ async function abrirProducto(id) {
     $("#mp-costo").value = p.costo || 0;
     $("#mp-stock").value = p.stock;
     $("#mp-minimo").value = p.minimo;
+    $("#mp-sin-stock").checked = !!p.sin_stock;
     $("#mp-unidad").value = p.unidad || "pieza";
     $("#mp-observaciones").value = p.observaciones || "";
     llenarProveedores(p.proveedor_id);
@@ -549,12 +1210,15 @@ async function abrirProducto(id) {
       : emoji({ categoria: p.categoria });
     $("#mp-borrar").style.display = "";
     refrescarMargen();
+    pintarFormatos("compra", p.formatos_compra || []);
+    pintarFormatos("venta", p.formatos_venta || []);
     await cargarKardex(id);
   } else {
     $("#mp-titulo").textContent = "Nuevo producto";
     ["#mp-nombre", "#mp-codigo", "#mp-categoria", "#mp-precio", "#mp-costo",
      "#mp-minimo", "#mp-observaciones"].forEach(s => { $(s).value = ""; });
     $("#mp-stock").value = 0;
+    $("#mp-sin-stock").checked = false;
     $("#mp-unidad").value = "pieza";
     llenarProveedores(0);
     estado.fotoTmp = "";
@@ -562,9 +1226,178 @@ async function abrirProducto(id) {
     $("#mp-borrar").style.display = "none";
     $("#mp-kardex").style.display = "none";
     refrescarMargen();
+    pintarFormatos("compra", []);
+    pintarFormatos("venta", []);
   }
   abrirModal("#m-prod");
+  refrescarUnidadesBase();
   setTimeout(() => $("#mp-nombre").focus(), 120);
+}
+
+/* ---------- Formatos de compra y de venta ---------- */
+
+const CATALOGO_FORMATOS = {
+  compra: [["unidad", 1], ["kg", 1], ["bolsa", null], ["caja", null], ["maple", null],
+           ["cajon", null], ["decena", 10], ["docena", 12], ["centena", 100],
+           ["bidon", null], ["paleta", null], ["atado", null], ["barra", null]],
+  venta: [["unidad", 1], ["media", null], ["docena", 12], ["decena", 10], ["centena", 100],
+          ["2x1", 2], ["3x2", 3], ["oferta", null], ["kg", 1], ["g", null],
+          ["L", 1], ["mL", null], ["botella", null]]
+};
+const FACTOR_SUGERIDO = { decena: 10, docena: 12, centena: 100, "2x1": 2, "3x2": 3, g: 0.001, ml: 0.001 };
+
+/** Dibuja una lista editable de formatos y recalcula costo y margenes. */
+function pintarFormatos(ambito, lista) {
+  const cont = $("#mp-fmt-" + ambito);
+  if (!cont) return;
+  estado["fmt_" + ambito] = (lista || []).map(f => ({
+    unidad: f.unidad || "", factor: Number(f.factor) || 1,
+    precio: f.precio === null || f.precio === undefined ? "" : Number(f.precio),
+    margen: f.margen === null || f.margen === undefined ? "" : Number(f.margen),
+    predet: !!f.predet
+  }));
+  dibujarFormatos(ambito);
+}
+
+/** Redibuja las filas desde el estado y engancha los eventos. */
+function dibujarFormatos(ambito) {
+  const cont = $("#mp-fmt-" + ambito);
+  if (!cont) return;
+  const filas = estado["fmt_" + ambito] || [];
+  if (!filas.length) {
+    cont.innerHTML = '<p class="parrafo fmt-vacio">Ninguno todavía. Agregá al menos uno.</p>';
+    refrescarCostoYMargenes();
+    return;
+  }
+  const esCompra = ambito === "compra";
+  cont.innerHTML = filas.map((f, i) => `
+    <div class="fmt-fila" data-i="${i}">
+      <input class="fmt-unidad" list="cat-fmt-${ambito}" placeholder="${esCompra ? "maple" : "docena"}" maxlength="20" value="${esc(f.unidad)}">
+      <input class="fmt-factor" type="number" step="0.0001" min="0.0001" placeholder="factor" value="${f.factor}">
+      ${esCompra
+        ? `<input class="fmt-precio" type="number" step="0.01" min="0" placeholder="precio" value="${f.precio}">`
+        : `<input class="fmt-precio" type="number" step="0.01" min="0" placeholder="precio" value="${f.precio}">
+           <input class="fmt-margen" type="number" step="0.1" placeholder="% costo" value="${f.margen}">`}
+      <span class="fmt-acciones">
+        <button type="button" class="btn sm fmt-predet ${f.predet ? " on" : ""}" data-predet="${ambito}:${i}" title="Usar este por defecto" aria-pressed="${f.predet ? "true" : "false"}">★</button>
+        <button type="button" class="btn sm peligro fmt-quitar" title="Quitar este formato">✕</button>
+      </span>
+      <span class="fmt-calc"></span>
+    </div>`).join("");
+
+  const cont2 = $("#mp-fmt-" + ambito);
+  cont2.querySelectorAll(".fmt-fila").forEach(fila => {
+    const i = Number(fila.dataset.i);
+    const sync = () => {
+      const f = estado["fmt_" + ambito][i];
+      f.unidad = fila.querySelector(".fmt-unidad").value.trim();
+      f.factor = Number(fila.querySelector(".fmt-factor").value) || 1;
+      f.precio = fila.querySelector(".fmt-precio").value === "" ? "" : Number(fila.querySelector(".fmt-precio").value);
+      const mg = fila.querySelector(".fmt-margen");
+      f.margen = mg ? (mg.value === "" ? "" : Number(mg.value)) : "";
+      refrescarCostoYMargenes();
+    };
+    fila.querySelectorAll("input").forEach(inp => {
+      inp.addEventListener("input", sync);
+      // Si elige un nombre del catalogo, se le completa el factor solo.
+      if (inp.classList.contains("fmt-unidad")) {
+        inp.addEventListener("change", () => {
+          const sug = FACTOR_SUGERIDO[(inp.value || "").toLowerCase()];
+          if (sug) { fila.querySelector(".fmt-factor").value = sug; }
+          sync();
+        });
+      }
+    });
+    fila.querySelector(".fmt-quitar").addEventListener("click", () => {
+      estado["fmt_" + ambito].splice(i, 1);
+      dibujarFormatos(ambito);
+    });
+    // Solo un formato por lista puede quedar como predeterminado.
+    const btnPredet = fila.querySelector(".fmt-predet");
+    if (btnPredet) {
+      btnPredet.addEventListener("click", () => {
+        const lista = estado["fmt_" + ambito];
+        const yaEra = lista[i].predet;
+        lista.forEach(f => { f.predet = false; });
+        lista[i].predet = !yaEra;
+        dibujarFormatos(ambito);
+      });
+    }
+  });
+  refrescarCostoYMargenes();
+}
+
+function agregarFilaFormato(ambito) {
+  estado["fmt_" + ambito] = estado["fmt_" + ambito] || [];
+  estado["fmt_" + ambito].push({ unidad: "", factor: 1, precio: "", margen: "", predet: false });
+  dibujarFormatos(ambito);
+  const filas = $("#mp-fmt-" + ambito).querySelectorAll(".fmt-unidad");
+  if (filas.length) filas[filas.length - 1].focus();
+}
+
+/**
+ * El costo por unidad sale del formato de compra marcado como predeterminado
+ * (o del primero con precio). Con ese costo se arma el precio de los formatos
+ * de venta que usan % en vez de precio fijo.
+ */
+function refrescarCostoYMargenes() {
+  if (!$("#mp-fmt-compra")) return;
+  const compra = estado.fmt_compra || [];
+  const base = (() => {
+    const c = compra.find(f => f.predet && Number(f.precio) > 0) || compra.find(f => Number(f.precio) > 0);
+    if (!c) return 0;
+    const fac = Number(c.factor) > 0 ? Number(c.factor) : 1;
+    return Math.round((Number(c.precio) / fac) * 100) / 100;
+  })();
+  estado.costoCalculado = base;
+  if ($("#mp-costo")) $("#mp-costo").value = base || "";
+
+  // Muestra el costo estimado en cada fila de formato.
+  (compra || []).forEach((f, i) => {
+    const cel = $("#mp-fmt-compra .fmt-fila[data-i='" + i + "'] .fmt-calc");
+    if (!cel) return;
+    const fac = Number(f.factor) > 0 ? Number(f.factor) : 1;
+    cel.textContent = f.unidad && Number(f.precio) > 0
+      ? "= " + dinero(Number(f.precio) / fac) + " c/u"
+      : "";
+  });
+  ((estado.fmt_venta) || []).forEach((f, i) => {
+    const cel = $("#mp-fmt-venta .fmt-fila[data-i='" + i + "'] .fmt-calc");
+    if (!cel) return;
+    const fac = Number(f.factor) > 0 ? Number(f.factor) : 1;
+    const porUnidad = f.precio !== "" && Number(f.precio) > 0
+      ? Number(f.precio) / fac
+      : (f.margen !== "" && base > 0 ? base * (1 + Number(f.margen) / 100) : 0);
+    if (porUnidad <= 0) { cel.textContent = ""; return; }
+    // El precio de la fila es el de un formato entero; el c/u es la division.
+    cel.textContent = fac === 1
+      ? ("= " + dinero(porUnidad) + " c/u")
+      : ("= " + dinero(porUnidad * fac) + " el " + (f.unidad || "formato")
+         + " \u00B7 " + dinero(porUnidad) + " c/u");
+  });
+
+  const av = $("#mp-costo-aviso");
+  if (av) av.textContent = base > 0 ? "(del formato de compra)" : "";
+  const av2 = $("#mp-precio-aviso");
+  if (av2) av2.textContent = "";
+
+  // Sugiere el precio del formato de venta predeterminado si esta vacio.
+  const dflt = (estado.fmt_venta || []).find(f => f.predet) || (estado.fmt_venta || [])[0];
+  if (dflt && (dflt.precio === "" || dflt.precio === null) && base > 0
+      && dflt.margen !== "" && Number(dflt.margen) !== 0) {
+    const fac = Number(dflt.factor) > 0 ? Number(dflt.factor) : 1;
+    const sugerido = Math.round(base * (1 + Number(dflt.margen) / 100) * fac * 100) / 100;
+    const inp = $("#mp-precio");
+    if (inp && !Number(inp.value)) { inp.value = sugerido; }
+  }
+  refrescarMargen();
+}
+
+function refrescarUnidadesBase() {
+  const u = $("#mp-unidad").value;
+  const base = (u === "kg") ? "kilos" : (u === "litro" ? "litros" : "unidades");
+  document.querySelectorAll(".mp-base").forEach(e => { e.textContent = base; });
+  refrescarCostoYMargenes();
 }
 
 async function cargarKardex(id) {
@@ -577,9 +1410,9 @@ async function cargarKardex(id) {
       return `<tr>
         <td class="fuente">${fechaHora(m.fecha)}</td>
         <td><span class="etq ${etq}">${esc(m.tipo)}</span></td>
-        <td class="num">${m.cantidad > 0 ? "+" : ""}${numeroLocal(m.cantidad, 0)}</td>
-        <td class="num">${numeroLocal(m.stock_anterior, 0)} → <strong>${numeroLocal(m.stock_actual, 0)}</strong></td>
-        <td class="fuente">${esc(m.referencia || "")}</td>
+        <td class="num">${m.cantidad > 0 ? "+" : ""}${esc(cantidadTxt(m.cantidad, m.unidad))}</td>
+        <td class="num">${esc(cantidadTxt(m.stock_anterior, m.unidad))} → <strong>${esc(cantidadTxt(m.stock_actual, m.unidad))}</strong></td>
+        <td class="fuente">${esc(m.referencia || "")}${m.nota ? `<br><span class="fuente" style="font-size:11.5px">${esc(m.nota)}</span>` : ""}</td>
       </tr>`;
     }).join("");
   } catch (e) { /* sin kardex */ }
@@ -595,7 +1428,10 @@ async function guardarProducto() {
     costo: Number($("#mp-costo").value) || 0,
     stock: Number($("#mp-stock").value) || 0,
     minimo: Number($("#mp-minimo").value) || 0,
+    sin_stock: $("#mp-sin-stock").checked ? 1 : 0,
     unidad: $("#mp-unidad").value,
+    formatos_compra: (estado.fmt_compra || []).filter(f => f.unidad),
+    formatos_venta: (estado.fmt_venta || []).filter(f => f.unidad),
     foto: estado.fotoTmp,
     observaciones: $("#mp-observaciones").value.trim(),
     proveedor_id: Number($("#mp-proveedor").value) || 0,
@@ -620,6 +1456,136 @@ async function guardarProducto() {
     renderGrid();
   } catch (e) {
     aviso(e.message, "mal");
+  }
+}
+
+/* =====================================================================
+   PRODUCTO RAPIDO — venta espontanea
+   ---------------------------------------------------------------------
+   El pancho que pidio Pepe, una pizza armada en el momento: se carga el
+   producto ahi, con el precio de hoy, y se cobra. No sale de un stock que
+   se cuente, asi que va marcado con sin_stock y no toca existencias.
+
+   El costo se deja en 0 a proposito. Los valores del proveedor cambian
+   todos los dias y armar una receta por producto prepared no esta a la
+   altura del negocio todavia: lo que manda es el precio que se cobra.
+
+   Si el nombre ya existe no se duplica: se reutiliza el producto y, si el
+   precio cambio, se pregunta antes de tocarlo.
+   ===================================================================== */
+
+const CATEGORIA_RAPIDA = "Venta libre";
+
+/** Busca un producto por nombre ignorando mayusculas, acentos y espacios. */
+function productoPorNombre(nombre) {
+  const n = norm(nombre).replace(/\s+/g, " ").trim();
+  if (!n) return null;
+  return estado.productos.find(p => norm(p.nombre).replace(/\s+/g, " ").trim() === n) || null;
+}
+
+/** Un producto con formato de venta predeterminado toma el precio de ahi,
+ *  no del campo "precio": tipearlo en la venta rapida no haria nada. */
+function precioVieneDeFormato(p) {
+  return !!(p && (p.formatos_venta || []).some(f => f.predet));
+}
+
+function abrirRapido() {
+  $("#pr-nombre").value = "";
+  $("#pr-precio").value = "";
+  const cats = categorias();
+  $("#pr-categoria").value = cats.includes(CATEGORIA_RAPIDA) ? CATEGORIA_RAPIDA : (cats[0] || CATEGORIA_RAPIDA);
+  $("#pr-existe").style.display = "none";
+  abrirModal("#m-rapido");
+  setTimeout(() => $("#pr-nombre").focus(), 120);
+}
+
+/** Mientras se escribe el nombre, avisa si ya está en el catálogo. */
+function avisarExisteRapido() {
+  const p = productoPorNombre($("#pr-nombre").value.trim());
+  const caja = $("#pr-existe");
+  if (!p) { caja.style.display = "none"; return; }
+  caja.style.display = "";
+  let texto = p.nombre + " — " + dinero(p.precio);
+  if (precioVieneDeFormato(p)) texto += " (el precio sale de su formato de venta)";
+  else if (p.sin_stock) texto += " (venta libre)";
+  $("#pr-existe-nombre").textContent = texto;
+  if (!$("#pr-precio").value) $("#pr-precio").value = p.precio;
+}
+
+async function guardarRapido() {
+  const btn = $("#pr-guardar");
+  const nombre = $("#pr-nombre").value.trim();
+  const precio = Number($("#pr-precio").value) || 0;
+  const categoria = $("#pr-categoria").value.trim() || CATEGORIA_RAPIDA;
+
+  if (!nombre) { aviso("Escribe qué es lo que se lleva el cliente.", "aviso-w"); $("#pr-nombre").focus(); return; }
+  if (precio <= 0) { aviso("Poné el precio de venta.", "aviso-w"); $("#pr-precio").focus(); return; }
+
+  const previo = productoPorNombre(nombre);
+  const mismoPrecio = previo && Math.round(Number(previo.precio) * 100) === Math.round(precio * 100);
+  const mandaElFormato = precioVieneDeFormato(previo);
+
+  // El precio es el del producto (no se cobra distinto en cada venta), asi que
+  // si cambió se avisa antes de sobrescribirlo.
+  if (previo && !mismoPrecio) {
+    if (mandaElFormato) {
+      // Tipear el precio acá no serviría de nada: manda el formato. Mejor decirlo
+      // que guardar en silencio y que el producto quede con el precio viejo.
+      const ok = await confirmar("El precio sale del formato",
+        '"' + previo.nombre + '" está en ' + dinero(previo.precio)
+        + " y ese precio sale de su formato de venta, no del producto.\n\n"
+        + "Para cambiarlo hay que editar el formato. ¿Lo agrego al ticket con el precio actual?");
+      if (!ok) { $("#pr-precio").focus(); return; }
+      cerrarModal("#m-rapido");
+      agregar(previo.id, 1);
+      aviso("Agregado: " + previo.nombre, "ok");
+      $("#txt-buscar").focus();
+      return;
+    }
+    const ok = await confirmar("Cambia el precio",
+      '"' + previo.nombre + '" está en ' + dinero(previo.precio) + ' y lo estás cargando a ' + dinero(precio)
+      + ".\n\n¿Querés actualizar el precio del producto?");
+    if (!ok) { $("#pr-precio").focus(); return; }
+  }
+
+  btn.disabled = true;
+  try {
+    if (!previo) {
+      // Nuevo: costo y stock en 0 a propósito, y marcado sin control de stock.
+      await api("producto_guardar", {
+        nombre, categoria, precio,
+        costo: 0, stock: 0, minimo: 0, unidad: "pieza",
+        sin_stock: 1, activo: 1
+      });
+    } else if (!mismoPrecio) {
+      // Ya existe: se manda solo el precio. El resto no se toca, asi que un
+      // producto que sí lleva stock no pierde su costo, su existencia ni su
+      // categoría por pasar por la venta rápida.
+      await api("producto_guardar", { id: previo.id, precio });
+    }
+
+    if (previo && mismoPrecio) {
+      // No hay nada que guardar: estaba igual, solo va al ticket.
+      cerrarModal("#m-rapido");
+      agregar(previo.id, 1);
+      aviso("Agregado: " + previo.nombre, "ok");
+      $("#txt-buscar").focus();
+      return;
+    }
+
+    await cargarProductos();
+    renderFiltros();
+    renderGrid();
+
+    const guardado = productoPorNombre(previo ? previo.nombre : nombre);
+    cerrarModal("#m-rapido");
+    if (guardado) agregar(guardado.id, 1);
+    aviso((previo ? "Precio actualizado" : "Producto cargado") + ": " + nombre, "ok");
+    $("#txt-buscar").focus();
+  } catch (e) {
+    aviso(e.message, "mal");
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -670,7 +1636,7 @@ function leerImagen(archivo) {
    ===================================================================== */
 let stockSel = null;
 
-function abrirStock(tipo) {
+function abrirStock(tipo, productoId) {
   stockSel = null;
   const entrada = tipo !== "salida";
   $("#ms-titulo").textContent = entrada ? "📥 Entrada de mercancía" : "📤 Salida de mercancía";
@@ -689,6 +1655,7 @@ function abrirStock(tipo) {
     : "Las salidas no cambian el costo del producto: solo descuentan existencias.";
   llenarProveedoresStock(0);
   abrirModal("#m-stock");
+  if (productoId) { elegirStock(productoId); return; }
   setTimeout(() => $("#ms-buscar").focus(), 120);
 }
 
@@ -710,7 +1677,7 @@ function filtrarStock() {
       ${fotoHTML(p, "avatar")}
       <div class="info">
         <div class="n">${esc(p.nombre)}</div>
-        <div class="s">Stock actual: ${numeroLocal(p.stock, 0)} ${esc(p.unidad || "")}</div>
+        <div class="s">Stock actual: ${esc(cantidadTxt(p.stock, p.unidad))}</div>
       </div>
       <span class="etq ${estadoStock(p).clase}">${dinero(p.precio)}</span>
     </div>`).join("") || (q ? '<div style="padding:14px;text-align:center;color:var(--muted)">Sin resultados</div>' : "");
@@ -726,10 +1693,76 @@ function elegirStock(id) {
     ? '<span class="etq neutro">costo ' + dinero(stockSel.costo) + " · margen " + numeroLocal(stockSel.margen, 1) + "%</span>"
     : '<span class="etq aviso">sin costo cargado</span>';
   $("#ms-info").innerHTML = "<span>" + esc(stockSel.nombre) + "</span>"
-    + '<span class="etq neutro">' + numeroLocal(stockSel.stock, 0) + " " + esc(stockSel.unidad || "") + " en existencia</span> " + extra;
+    + '<span class="etq neutro">' + esc(cantidadTxt(stockSel.stock, stockSel.unidad)) + " en existencia</span> " + extra;
+
+  const entrada = $("#ms-guardar").dataset.tipo !== "salida";
+  const formatos = entrada ? (stockSel.formatos_compra || []) : [];
+
+  $("#ms-campo-uc").style.display = formatos.length ? "" : "none";
+  $("#ms-campo-pc").style.display = formatos.length ? "" : "none";
+  $("#ms-campo-costo").style.display = formatos.length ? "none" : "";
+
+  if (formatos.length) {
+    // El predeterminado entra preseleccionado con su precio cargado.
+    const sel = $("#ms-formato-compra");
+    sel.innerHTML = formatos.map(f => {
+      const etq = f.unidad + (Number(f.factor) !== 1
+        ? " — " + cantidadTxt(Number(f.factor), stockSel.unidad || "pieza") : "");
+      return `<option value="${f.id}">${esc(etq)}</option>`;
+    }).join("");
+    const predet = formatos.find(f => f.predet) || formatos[0];
+    sel.value = String(predet.id);
+    aplicarFormatoCompra();
+    $("#ms-cant").value = 1;
+  } else {
+    // Sin formatos de compra: se resta en unidad base y se carga el costo.
+    $("#ms-precio-compra").value = 0;
+    $("#ms-cant-unidad").textContent = "(" + (stockSel.unidad || "pieza") + ")";
+  }
+  refrescarPreviewStock();
   $("#ms-guardar").disabled = false;
   $("#ms-cant").focus();
   $("#ms-cant").select();
+}
+
+/** Carga precio y factor del formato de compra elegido. */
+function aplicarFormatoCompra() {
+  const sel = $("#ms-formato-compra");
+  if (!sel || !stockSel) return;
+  const formatos = stockSel.formatos_compra || [];
+  const f = formatos.find(x => x.id === Number(sel.value));
+  if (!f) return;
+  $("#ms-precio-compra").value = Number(f.precio) > 0 ? f.precio : "";
+  $("#ms-pc-label").textContent = f.unidad;
+  refrescarPreviewStock();
+}
+
+/** Muestra quantas unidades base entran y a cuanto queda el costo. */
+function refrescarPreviewStock() {
+  if (!stockSel) return;
+  const p = $("#ms-preview");
+  const cant = Number($("#ms-cant").value) || 0;
+  const entrada = $("#ms-guardar").dataset.tipo !== "salida";
+  const formatos = entrada ? (stockSel.formatos_compra || []) : [];
+  const f = formatos.find(x => x.id === Number($("#ms-formato-compra") && $("#ms-formato-compra").value));
+  const factor = f ? (Number(f.factor) || 1) : 1;
+  const suma = r2(cant * factor);
+  if (!suma) { p.style.display = "none"; return; }
+  p.style.display = "";
+  const partes = ["<b>" + esc(cantidadTxt(suma, stockSel.unidad)) + "</b> (" + cant + " "
+    + (f ? esc(f.unidad) + " × " + cantidadTxt(factor, stockSel.unidad) : esc(stockSel.unidad || "pieza")) + ")",
+    "quedan " + esc(cantidadTxt(r2(stockSel.stock + (entrada ? suma : -suma)), stockSel.unidad))];
+  const pc = Number($("#ms-precio-compra").value) || 0;
+  if (entrada && pc > 0 && factor > 0) {
+    const nuevo = r2(pc / factor);
+    partes.push("costo " + dinero(nuevo) + " por " + esc(stockSel.unidad || "pieza"));
+    if (nuevo !== r2(stockSel.costo)) {
+      const actual = stockSel.costo > 0
+        ? " (antes " + dinero(stockSel.costo) + ")" : " (sin costo cargado)";
+      partes.push("el costo del producto cambia" + actual);
+    }
+  }
+  p.innerHTML = partes.join(" · ");
 }
 
 async function guardarStock() {
@@ -744,16 +1777,24 @@ async function guardarStock() {
   if (tipo !== "salida") {
     cuerpo.proveedor_id = Number($("#ms-proveedor").value) || 0;
     cuerpo.documento = $("#ms-documento").value.trim();
-    const costo = Number($("#ms-costo").value) || 0;
-    if (costo > 0) cuerpo.costo_unitario = costo;
+    const formatos = stockSel.formatos_compra || [];
+    const f = formatos.find(x => x.id === Number($("#ms-formato-compra").value));
+    if (f) {
+      cuerpo.formato_id = f.id;
+      cuerpo.formato_unidad = f.unidad;
+      cuerpo.formato_factor = f.factor;
+      const pc = Number($("#ms-precio-compra").value) || 0;
+      if (pc > 0) cuerpo.precio_formato = pc;
+    } else {
+      const costo = Number($("#ms-costo").value) || 0;
+      if (costo > 0) cuerpo.costo_unitario = costo;
+    }
   }
   try {
     const r = await api("stock_mover", cuerpo);
     cerrarModal("#m-stock");
-    let msg = "Movimiento registrado. Stock actual: " + numeroLocal(r.stock, 0);
-    if (r.costo > 0 && Number($("#ms-costo").value) > 0) {
-      msg += " · costo actualizado a " + dinero(r.costo);
-    }
+    let msg = "Movimiento registrado. Stock actual: " + cantidadTxt(r.stock, stockSel ? stockSel.unidad : "");
+    if (r.costo > 0) msg += " · costo " + dinero(r.costo) + " por unidad";
     aviso(msg, "ok");
     await cargarProductos();
     renderPOS();
@@ -846,7 +1887,7 @@ function mostrarVenta(v, recienHecha) {
   const filas = (v.items || []).map(i => `
     <tr>
       <td>${esc(i.nombre)}</td>
-      <td class="num fuente">${numeroLocal(i.cantidad, 0)} × ${dinero(i.precio)}</td>
+      <td class="num fuente">${esc(cantidadTxt(i.cantidad, i.unidad))} × ${dinero(i.precio)}</td>
       <td class="num">${dinero(i.importe)}</td>
     </tr>`).join("");
 
@@ -893,7 +1934,7 @@ function imprimirTicket(v) {
   const c = estado.config;
   const lineas = (v.items || []).map(i =>
     "<tr><td colspan='2'>" + esc(i.nombre) + "</td></tr>"
-    + "<tr><td>&nbsp;&nbsp;" + numeroLocal(i.cantidad, 0) + " x " + dinero(i.precio, false) + "</td>"
+    + "<tr><td>&nbsp;&nbsp;" + esc(cantidadTxt(i.cantidad, i.unidad)) + " x " + dinero(i.precio, false) + "</td>"
     + "<td class='d'>" + dinero(i.importe, false) + "</td></tr>"
   ).join("");
 
@@ -927,7 +1968,7 @@ function imprimirTicket(v) {
       <div style="margin-top:5px">*** Gracias ***</div>
     </div>`;
 
-  window.print();
+  imprimirTicketAhora("venta");
 }
 
 /* =====================================================================
@@ -955,7 +1996,7 @@ async function renderReportes() {
       <div class="stat"><div class="cap">Inventario a costo</div><div class="val">${dinero(s.costo_inventario)}</div>
         <div class="sub">a venta: ${dinero(s.inventario)} · en anaquel: ${dinero(s.ganancia_potencial)}</div></div>
       <div class="stat"><div class="cap">Anuladas</div><div class="val" style="${s.anuladas ? "color:var(--bad)" : ""}">${numeroLocal(s.anuladas, 0)}</div>
-        <div class="sub">${numeroLocal(s.unidades, 0)} piezas en almacén</div></div>`;
+        <div class="sub">${numeroLocal(s.unidades, 2)} unidades en almacén</div></div>`;
 
     // Gráfica por hora
     const horas = r.por_hora;
@@ -977,7 +2018,7 @@ async function renderReportes() {
       <tr>
         <td class="fuente">${i < 3 ? ["🥇", "🥈", "🥉"][i] : (i + 1)}</td>
         <td>${esc(t.nombre)}</td>
-        <td class="num">${numeroLocal(t.unidades, 0)}</td>
+        <td class="num">${numeroLocal(t.unidades, 2)}</td>
         <td class="num">${dinero(t.vendido)}
           <br><span class="fuente" style="font-size:11px">margen ${t.costo > 0 ? numeroLocal(t.margen, 1) + "%" : "—"}</span></td>
       </tr>`).join("")
@@ -998,9 +2039,9 @@ async function renderReportes() {
       const sugerido = Math.max(f.minimo * 2 - f.stock, f.minimo > 0 ? 1 : 0, 1);
       return `<tr>
         <td>${esc(f.nombre)}</td>
-        <td class="num"><span class="etq ${f.stock <= 0 ? "mal" : "aviso"}">${numeroLocal(f.stock, 0)}</span></td>
-        <td class="num fuente">${numeroLocal(f.minimo, 0)}</td>
-        <td class="num">${numeroLocal(Math.round(sugerido), 0)} ${esc(f.unidad || "")}</td>
+<td class="num"><span class="etq ${f.stock <= 0 ? "mal" : "aviso"}">${esc(cantidadTxt(f.stock, f.unidad))}</span></td>
+<td class="num fuente">${esc(cantidadTxt(f.minimo, f.unidad))}</td>
+<td class="num">${esc(cantidadTxt(Math.round(sugerido * 100) / 100, f.unidad))}</td>
         <td class="num">${dinero(sugerido * f.precio)}</td>
       </tr>`;
     }).join("")
@@ -1012,7 +2053,7 @@ async function renderReportes() {
       const filas = [["Producto", "Categoría", "Stock actual", "Mínimo", "Sugerido", "Unidad", "Costo estimado"]];
       r.faltantes.forEach(f => {
         const sug = Math.round(Math.max(f.minimo * 2 - f.stock, 1));
-        filas.push([f.nombre, "", numeroLocal(f.stock, 0), numeroLocal(f.minimo, 0), sug, f.unidad || "", r2(sug * f.precio).toFixed(2)]);
+        filas.push([f.nombre, "", cantidadTxt(f.stock, f.unidad), cantidadTxt(f.minimo, f.unidad), sug, f.unidad || "", r2(sug * f.precio).toFixed(2)]);
       });
       descargar(aCSV(filas), "lista-de-compra-" + hoyISO() + ".csv");
       aviso("Lista de compra descargada.", "ok");
@@ -1037,7 +2078,8 @@ async function cargarMediosPago() {
     tb.innerHTML = r.medios.length ? r.medios.map(m => `
       <tr>
         <td style="font-size:19px">${esc(m.icono)}</td>
-        <td><strong>${esc(m.nombre)}</strong>${m.efectivo ? ' <span class="etq ok">recibe vuelto</span>' : ""}</td>
+        <td><strong>${esc(m.nombre)}</strong></td>
+        <td>${m.efectivo ? '<span class="etq ok">sí</span>' : '<span class="fuente">no</span>'}</td>
         <td>${m.referencia ? '<span class="etq neutro">sí</span>' : '<span class="fuente">no</span>'}</td>
         <td>${m.activo ? '<span class="etq ok">Activo</span>' : '<span class="etq neutro">Inactivo</span>'}</td>
         <td class="acciones">
@@ -1045,7 +2087,7 @@ async function cargarMediosPago() {
           <button class="btn sm peligro" data-mp-borrar="${m.id}">🗑</button>
         </td>
       </tr>`).join("")
-      : '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted)">Sin medios de pago</td></tr>';
+      : '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--muted)">Sin medios de pago</td></tr>';
   } catch (e) { /* sin tabla */ }
 }
 
@@ -1158,7 +2200,7 @@ async function renderAjustes() {
   $("#c-logo").value = c.logo || "K";
   $("#c-folio").value = c.folio || 1;
 
-  await Promise.all([cargarMediosPago(), cargarProveedores()]);
+  await Promise.all([cargarMediosPago(), cargarProveedores(), cargarUsuarios()]);
 
   try {
     const r = await api("estado");
@@ -1168,13 +2210,13 @@ async function renderAjustes() {
       ["Productos en catálogo", numeroLocal(r.productos, 0)],
       ["Ventas de hoy", numeroLocal(r.hoy.ventas, 0) + " · " + dinero(r.hoy.total)],
       ["Valor del inventario", dinero(r.valor_inventario)],
-      ["Ubicación", "C:\\laragon\\www\\kiosco"]
+      ["Ubicación", "C:\\laragon\\www\\secmkiosko"]
     ];
     $("#a-estado").innerHTML = info.map(i =>
       '<div class="fila" style="padding:6px 0"><span>' + esc(i[0]) + '</span><b>' + esc(i[1]) + "</b></div>"
     ).join("") + '<div class="parrafo" style="margin:14px 0 0;font-size:12.5px">'
       + "Para abrir este sistema en otra computadora: instala Laragon, copia la carpeta "
-      + "<code>kiosco</code> dentro de <code>www</code>, abre <code>instalar.php</code> una vez "
+      + "<code>secmkiosko</code> dentro de <code>www</code>, abre <code>instalar.php</code> una vez "
       + "y restaura el archivo de respaldo.</div>";
   } catch (e) {
     $("#a-estado").innerHTML = '<div class="parrafo" style="margin:0">No se pudo leer el estado: ' + esc(e.message) + "</div>";
@@ -1326,6 +2368,7 @@ function pedirDato(titulo, rotulo, ayuda, valorInicial, tipo) {
 }
 
 const pedirTexto = (t, r, a, v) => pedirDato(t, r, a, v, "text");
+const pedirClave = (t, r, a, v) => pedirDato(t, r, a, v, "password");
 const pedirNumero = (t, r, a, v) => pedirDato(t, r, a, v, "number");
 
 /** Devuelve true (sí), false (no) o null (cancelado). */
@@ -1336,8 +2379,594 @@ async function pedirSiNo(titulo, ayuda) {
 }
 
 /* =====================================================================
-   15. CARGA DE DATOS
-   ===================================================================== */
+    15. CAJAS
+    ===================================================================== */
+
+/** Pide el efectivo inicial y abre la caja. */
+function abrirModalAbrirCaja() {
+  const inp = $("#ac-monto");
+  inp.value = "";
+  $("#ac-aviso").innerHTML = "Si no ponés nada, la caja arranca en <b>" + dinero(0) + "</b>.";
+  abrirModal("#m-abrir-caja");
+  setTimeout(() => inp.focus(), 60);
+}
+
+async function confirmarAbrirCaja() {
+  const btn = $("#ac-ok");
+  btn.disabled = true;
+  try {
+    const r = await api("caja_abrir", { monto_inicial: $("#ac-monto").value });
+    estado.caja = r.caja;
+    cerrarModal("#m-abrir-caja");
+    aviso("Caja abierta. Ya podés cobrar.", "ok");
+    pintarEstadoCaja();
+    await renderCajas();
+  } catch (e) {
+    aviso(e.message, "mal");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/** Mi caja: estado, números del turno y botones. */
+async function refrescarMiCaja() {
+  const r = await api("cajas_mias");
+  estado.caja = r.caja;
+  pintarEstadoCaja();
+  return r;
+}
+
+async function renderCajas() {
+  await pintarMiCaja();
+  await cargarListaCajas();
+}
+
+/** Panel de arriba: abrir/cerrar y el resumen del turno. */
+async function pintarMiCaja() {
+  const r = await api("cajas_mias");
+  estado.caja = r.caja;
+  pintarEstadoCaja();
+
+  const est = $("#mi-caja-estado");
+  const cue = $("#mi-caja-cue");
+  if (!cue) return;
+
+  if (!r.caja) {
+    est.innerHTML = '<span class="etq neutro">Cerrada</span>';
+    cue.innerHTML =
+      '<div class="caja-abrir">'
+      + '<div class="txt"><b>No tenés una caja abierta</b>'
+      + '<span>No se puede cobrar sin caja. Poné el efectivo con el que arrancás el turno y '
+      + 'después vendé con normalidad.</span></div>'
+      + '<button class="btn ok" id="mi-caja-abrir">🏧 Abrir mi caja</button>'
+      + "</div>";
+    $("#mi-caja-abrir").addEventListener("click", abrirModalAbrirCaja);
+    return;
+  }
+
+  const c = r.caja;
+  const s = r.resumen;
+  const esperado = r2(c.monto_inicial + s.metodos.filter(m => m.es_efectivo).reduce((a, m) => a + m.esperado, 0));
+
+  est.innerHTML = '<span class="etq ok">Abierta #' + c.id + '</span>';
+  cue.innerHTML =
+    '<div class="caja-nums" style="margin-bottom:14px">'
+    + '<div class="n"><div class="cap">Fondo inicial</div><div class="val">' + dinero(c.monto_inicial) + "</div></div>"
+    + '<div class="n"><div class="cap">Ventas del turno</div><div class="val">' + s.ventas + "</div></div>"
+    + '<div class="n"><div class="cap">Vendido</div><div class="val">' + dinero(s.total) + "</div></div>"
+    + '<div class="n ok"><div class="cap">Efectivo esperado</div><div class="val">' + dinero(esperado) + "</div></div>"
+    + "</div>"
+    + '<div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">'
+    + '<button class="btn pri" id="mi-caja-cerrar">🔒 Contar y cerrar caja</button>'
+    + '<span class="fuente" style="font-size:12.5px">Abierta ' + horaDe(c.abierta_en) + "</span>"
+    + "</div>";
+
+  $("#mi-caja-cerrar").addEventListener("click", () => abrirModalCerrarCaja(c, s));
+}
+
+/**
+ * Modal de cierre: una fila por medio de pago con lo esperado y lo contado.
+ * `cajaId` se pasa sólo cuando el administrador cierra la caja de otro.
+ */
+function abrirModalCerrarCaja(c, s, cajaId) {
+  const filas = s.metodos.filter(m => m.ventas > 0);
+  const inicial = c.monto_inicial;
+  $("#cc-ok").dataset.caja = cajaId || 0;
+
+  $("#cc-tabla").innerHTML =
+    '<table class="tabla-mp"><thead><tr>'
+    + '<th style="width:30px"></th><th>Método</th><th class="num">Esperado</th>'
+    + '<th class="num" style="width:130px">Contado</th><th class="num" style="width:100px">Diferencia</th>'
+    + "</tr></thead><tbody>"
+    + filas.map(m => {
+      // El efectivo esperado ya incluye el fondo con el que se abrió la caja.
+      const esp = m.es_efectivo ? r2(m.esperado + inicial) : m.esperado;
+      return '<tr data-mp="' + m.id + '" data-esp="' + esp + '" data-efe="' + (m.es_efectivo ? 1 : 0) + '">'
+        + '<td class="mp-ico">' + esc(m.icono) + "</td>"
+        + "<td><b>" + esc(m.nombre) + "</b><br><span class=\"fuente\" style=\"font-size:11.5px\">"
+        + m.ventas + (m.ventas === 1 ? " venta" : " ventas") + "</span></td>"
+        + '<td class="num">' + dinero(esp) + "</td>"
+        + '<td class="declarado"><input type="text" inputmode="decimal" data-decl="' + m.id + '" value="'
+        + numCorto(esp) + '" autocomplete="off"></td>'
+        + '<td class="num dif cero" data-dif="' + m.id + '">—</td>'
+        + "</tr>";
+    }).join("")
+    + "</tbody></table>"
+    + (filas.length === 0
+      ? '<p class="parrafo" style="margin:12px 0 0">No vendiste nada en este turno, así que no hay nada que conciliar.</p>'
+      : "");
+
+  $$("#cc-tabla input[data-decl]").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const fila = inp.closest("tr");
+      const dif = r2(parseNum(inp.value) - parseNum(fila.dataset.esp));
+      const cel = fila.querySelector("[data-dif]");
+      cel.textContent = dif === 0 ? "—" : (dif > 0 ? "+" : "−") + dinero(Math.abs(dif));
+      cel.className = "num dif " + (dif === 0 ? "cero" : (dif > 0 ? "sobra" : "falta"));
+      inp.classList.toggle("cuadra", dif === 0);
+      inp.classList.toggle("nocuadra", dif !== 0);
+      actualizarMotivoCierre();
+    });
+  });
+
+  actualizarMotivoCierre();
+  $("#cc-motivo").value = "";
+  abrirModal("#m-cerrar-caja");
+}
+
+/** Pide el motivo sólo si algo no da exacto. */
+function actualizarMotivoCierre() {
+  const hayDescuadre = $$("#cc-tabla input[data-decl]").some(inp => !inp.classList.contains("cuadra"));
+  $("#cc-motivo-campo").style.display = hayDescuadre ? "" : "none";
+  if (hayDescuadre) {
+    const f = $$("#cc-tabla tr").find(tr => {
+      const i = tr.querySelector("input[data-decl]");
+      return i && !i.classList.contains("cuadra");
+    });
+    const d = f ? f.querySelector("[data-dif]").textContent : "";
+    $("#cc-motivo-label").innerHTML = 'Motivo del descuadre <span class="etq mal" style="margin-left:5px">'
+      + esc(d) + '</span> — anotá qué pasó para que el administrador lo revise';
+  }
+}
+
+async function confirmarCerrarCaja() {
+  const btn = $("#cc-ok");
+  btn.disabled = true;
+  const declarados = {};
+  $$("#cc-tabla input[data-decl]").forEach(inp => {
+    declarados[inp.dataset.decl] = parseNum(inp.value);
+  });
+  try {
+    const cajaId = Number(btn.dataset.caja) || 0;
+    await api("caja_cerra", { declarados, motivo: $("#cc-motivo").value.trim(), caja_id: cajaId });
+    if (!cajaId) estado.caja = null;
+    cerrarModal("#m-cerrar-caja");
+    aviso("Caja cerrada. Quedó registrada en el historial.", "ok");
+    await refrescarCabecera();
+    await renderCajas();
+  } catch (e) {
+    aviso(e.message, "mal");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/** Historial de cajas. El vendedor sólo ve las suyas. */
+async function cargarListaCajas() {
+  const tb = $("#cajas-tb");
+  if (!tb) return;
+  let r;
+  try {
+    r = await api("cajas_todas", { desde: $("#cj-desde").value, hasta: $("#cj-hasta").value });
+    estado.cajas = r.cajas || [];
+  } catch (e) {
+    tb.innerHTML = '<tr><td colspan="10" style="padding:20px;text-align:center;color:var(--bad)">'
+      + esc(e.message) + "</td></tr>";
+    return;
+  }
+
+  $("#cajas-titulo").innerHTML = (r.solo_mias ? "Mis cajas" : "Historial de cajas")
+    + (r.descuadres ? ' · <span class="etq mal">' + r.descuadres + " con descuadre</span>" : "");
+
+  const cs = estado.cajas;
+  tb.innerHTML = cs.length
+    ? cs.map(filaCajaTabla).join("")
+    : '<tr><td colspan="10" style="padding:20px;text-align:center;color:var(--muted)">No hay cajas en esas fechas</td></tr>';
+
+  $$("#cajas-tb [data-ver-caja]").forEach(b =>
+    b.addEventListener("click", () => verCaja(Number(b.dataset.verCaja))));
+}
+
+function filaCajaTabla(c) {
+  let estado;
+  if (c.abierta) {
+    estado = '<span class="etq ok">Abierta</span>';
+  } else if (c.diferencia === null) {
+    estado = '<span class="etq neutro">—</span>';
+  } else if (Math.abs(c.diferencia) < 0.01) {
+    estado = '<span class="etq ok">Cuadrada</span>';
+  } else {
+    estado = '<span class="etq mal">' + (c.diferencia > 0 ? "Sobró " : "Faltó ")
+      + dinero(Math.abs(c.diferencia)) + "</span>";
+  }
+  const nota = !c.abierta && c.motivo
+    ? '<br><span class="fuente" style="font-size:11px">' + esc(c.motivo) + "</span>" : "";
+  return "<tr>"
+    + "<td><b>#" + c.id + "</b></td>"
+    + (esAdmin() ? "<td>" + esc(c.cajero_usuario || "") + nota + "</td>" : "")
+    + "<td>" + esc(fechaHora(c.abierta_en)) + "</td>"
+    + "<td>" + (c.cerrada_en ? esc(fechaHora(c.cerrada_en)) : "—") + "</td>"
+    + '<td class="num">' + (c.ventas === null ? "—" : c.ventas) + "</td>"
+    + '<td class="num">' + dinero(c.monto_inicial) + "</td>"
+    + '<td class="num">' + dinero(c.total_esperado) + "</td>"
+    + '<td class="num">' + dinero(c.efectivo_declarado) + "</td>"
+    + "<td>" + estado + "</td>"
+    + '<td class="acciones"><button class="btn sm" data-ver-caja="' + c.id + '">👁</button></td>'
+    + "</tr>";
+}
+
+/** Detalle de una caja + ticket imprimible. */
+async function verCaja(id) {
+  try {
+    const r = await api("caja_detalle", { id });
+    const c = r.caja, s = r.resumen;
+    $("#cd-titulo").textContent = "Caja #" + c.id + " · " + (c.cajero_usuario || "");
+
+    const cuadra = !c.abierta && c.diferencia !== null && Math.abs(c.diferencia) < 0.01;
+    const difTxt = c.abierta
+      ? '<span class="etq ok">Abierta</span>'
+      : (cuadra
+        ? '<span class="etq ok">Cuadrada</span>'
+        : '<span class="etq mal">' + (c.diferencia > 0 ? "Sobró " : "Faltó ") + dinero(Math.abs(c.diferencia)) + "</span>");
+
+    $("#cd-cue").innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+      + '<div style="font-size:13px">' + difTxt + "</div>"
+      + '<div class="caja-nums" style="flex:1;min-width:260px">'
+      + '<div class="n"><div class="cap">Fondo</div><div class="val">' + dinero(c.monto_inicial) + "</div></div>"
+      + '<div class="n"><div class="cap">Vendido</div><div class="val">' + dinero(s.total) + "</div></div>"
+      + '<div class="n"><div class="cap">Efectivo esperado</div><div class="val">' + dinero(c.efectivo_esperado) + "</div></div>"
+      + '<div class="n"><div class="cap">Efectivo contado</div><div class="val">' + dinero(c.efectivo_declarado) + "</div></div>"
+      + "</div></div>"
+      + (c.motivo ? '<p class="parrafo" style="margin:0 0 12px"><b>Motivo:</b> ' + esc(c.motivo) + "</p>" : "")
+      + '<table class="tabla-mp"><thead><tr><th style="width:30px"></th><th>Método</th>'
+      + '<th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th></tr></thead><tbody>'
+      + s.metodos.filter(m => m.ventas > 0).map(m => {
+        const esp = m.es_efectivo ? r2(m.esperado + c.monto_inicial) : m.esperado;
+        const d = r2(m.declarado - m.esperado);
+        return "<tr><td class=\"mp-ico\">" + esc(m.icono) + "</td><td><b>" + esc(m.nombre) + "</b></td>"
+          + '<td class="num">' + dinero(esp) + "</td>"
+          + '<td class="num">' + dinero(m.es_efectivo ? m.declarado : m.esperado) + "</td>"
+          + '<td class="num dif ' + (d === 0 ? "cero" : (d > 0 ? "sobra" : "falta")) + '">'
+          + (d === 0 ? "—" : (d > 0 ? "+" : "−") + dinero(Math.abs(d))) + "</td></tr>";
+      }).join("")
+      + "</tbody></table>"
+      + '<h3 style="font-size:13px;margin:16px 0 7px">Ventas del turno (' + r.ventas.length + ")</h3>"
+      + '<div style="max-height:220px;overflow:auto"><table class="tabla-mp"><tbody>'
+      + r.ventas.map(v =>
+        "<tr><td>#" + v.folio + "</td>"
+        + '<td class="fuente" style="font-size:12px">' + esc(fechaHora(v.fecha)) + "</td>"
+        + "<td>" + esc(v.metodo) + (v.referencia ? ' <span class="fuente">(' + esc(v.referencia) + ")</span>" : "") + "</td>"
+        + (v.anulada ? '<td><span class="etq mal">anulada</span></td>' : "")
+        + '<td class="num"><b>' + dinero(v.total) + "</b></td></tr>").join("")
+      + "</tbody></table></div>";
+
+    $("#cd-caja-datos").value = JSON.stringify(c);
+    // El administrador puede cerrar una caja que quedó abierta (el cajero se
+    // fue sin cerrar). El vendedor sólo cierra la suya desde "Mi caja".
+    const btnCerrar = $("#cd-cerrar-caja");
+    if (btnCerrar) {
+      const puede = c.abierta && (esAdmin() || (estado.caja && estado.caja.id === c.id));
+      btnCerrar.style.display = puede ? "" : "none";
+      btnCerrar.onclick = async () => {
+        if (!await confirmar("Cerrar la caja #" + c.id,
+          "Vas a contar el efectivo y cerrar la caja de " + (c.cajero || "") + ". "
+          + "Queda registrada con tu nombre. Esta acción no se puede deshacer.")) return;
+        cerrarModal("#m-caja-detalle");
+        await cargarListaCajas();
+        abrirModalCerrarCajaAjena(c);
+      };
+    }
+    abrirModal("#m-caja-detalle");
+  } catch (e) {
+    aviso(e.message, "mal");
+  }
+}
+
+/** Cierre de una caja ajena: reutiliza la tabla de conciliación. */
+function abrirModalCerrarCajaAjena(c) {
+  api("caja_detalle", { id: c.id }).then(r => {
+    // efectivoEsperadoCaja vive en el servidor; la conciliación por método
+    // que arma el modal ya trae el esperado de cada medio de pago.
+    abrirModalCerrarCaja(
+      { id: c.id, monto_inicial: c.monto_inicial },
+      r.resumen,
+      c.id
+    );
+  }).catch(e => aviso(e.message, "mal"));
+}
+
+/** Ticket de la caja, para imprimir y archivar en el mostrador. */
+function imprimirCaja() {
+  const btn = $("#cd-imprimir");
+  btn.disabled = true;
+  (async () => {
+    try {
+      const c = JSON.parse($("#cd-caja-datos").value);
+      const r = await api("caja_detalle", { id: c.id });
+      const s = r.resumen;
+      const cuadra = !r.caja.abierta && r.caja.diferencia !== null && Math.abs(r.caja.diferencia) < 0.01;
+
+      $("#ticket-caja").innerHTML = '<div class="papel">'
+        + "<h1>" + esc(estado.config.negocio || "Kiosco") + "</h1>"
+        + '<div class="cen">Cierre de caja #' + r.caja.id + "<br>"
+        + fechaHora(r.caja.abierta_en) + " → " + (r.caja.cerrada_en ? fechaHora(r.caja.cerrada_en) : "sin cerrar")
+        + "<br>Cajero: " + esc(r.caja.cajero || "") + "</div><hr>"
+        + '<div class="lin"><span>Fondo inicial</span><b>' + dinero(r.caja.monto_inicial) + "</b></div><hr>"
+        + s.metodos.filter(m => m.ventas > 0).map(m => {
+          const esp = m.es_efectivo ? r2(m.esperado + r.caja.monto_inicial) : m.esperado;
+          const dec = m.es_efectivo ? m.declarado : m.esperado;
+          return '<div class="mp"><span>' + esc(m.icono) + " " + esc(m.nombre) + " (" + m.ventas + ")</span>"
+            + "<b>" + dinero(esp) + "</b>"
+            + '<div class="lin" style="font-size:11px"><span>contado</span><span>' + dinero(dec) + "</span></div></div>";
+        }).join("") + "<hr>"
+        + '<div class="lin"><span>TOTAL VENDIDO</span><b>' + dinero(s.total) + "</b></div>"
+        + '<div class="lin tot"><span>Efectivo esperado</span><b>' + dinero(r.caja.efectivo_esperado) + "</b></div>"
+        + '<div class="lin tot"><span>Efectivo contado</span><b>' + dinero(r.caja.efectivo_declarado) + "</b></div>"
+        + '<div class="lin tot"><span>' + (cuadra ? "CIERRE" : (r.caja.diferencia > 0 ? "SOBRÓ" : "FALTÓ")) + "</span>"
+        + "<b>" + dinero(r.caja.diferencia) + "</b></div>"
+        + (r.caja.motivo ? '<hr><div style="font-size:11px">Motivo: ' + esc(r.caja.motivo) + "</div>" : "")
+        + '<div class="firma">____________________________<br>Conformidad del cajero</div>'
+        + "</div>";
+      imprimirTicketAhora("caja");
+    } catch (e) {
+      aviso(e.message, "mal");
+    } finally {
+      btn.disabled = false;
+    }
+  })();
+}
+
+/* =====================================================================
+    16. USUARIOS
+    ===================================================================== */
+async function cargarUsuarios() {
+  const tb = $("#usuarios-tb");
+  if (!tb) return;
+  try {
+    const r = await api("usuarios");
+    estado.usuarios = r.usuarios;
+  } catch (e) {
+    return;   // el vendedor no tiene acceso a esta lista
+  }
+  const yo = estado.yo;
+  tb.innerHTML = estado.usuarios.map(u => {
+    const esYo = yo && u.id === yo.id;
+    return "<tr>"
+      + '<td style="font-size:17px">' + (u.rol === "admin" ? "🔑" : "🧑") + "</td>"
+      + "<td><b>" + esc(u.usuario) + "</b>" + (esYo ? ' <span class="etq ok">vos</span>' : "") + "</td>"
+      + "<td>" + esc(u.nombre) + "</td>"
+      + '<td><span class="etq ' + (u.rol === "admin" ? "pri" : "neutro") + '">'
+      + (u.rol === "admin" ? "Administrador" : "Vendedor") + "</span></td>"
+      + '<td class="num">' + u.cajas + "</td>"
+      + '<td class="fuente" style="font-size:12px">'
+      + (u.ultimo_ingreso ? esc(fechaHora(u.ultimo_ingreso)) : "nunca") + "</td>"
+      + "<td>" + (u.activo ? '<span class="etq ok">Activo</span>' : '<span class="etq mal">Inactivo</span>') + "</td>"
+      + '<td class="acciones">'
+      + '<button class="btn sm" data-us-editar="' + u.id + '">✎</button>'
+      + (esYo ? "" : '<button class="btn sm peligro" data-us-borrar="' + u.id + '">🗑</button>')
+      + "</td></tr>";
+  }).join("");
+
+  $$("#usuarios-tb [data-us-editar]").forEach(b =>
+    b.addEventListener("click", () => guardarUsuario(Number(b.dataset.usEditar))));
+  $$("#usuarios-tb [data-us-borrar]").forEach(b =>
+    b.addEventListener("click", () => borrarUsuario(Number(b.dataset.usBorrar))));
+}
+
+function guardarUsuario(id) {
+  const u = id ? estado.usuarios.find(x => x.id === id) : null;
+  $("#mu-titulo").textContent = u ? "Editar usuario" : "Nuevo usuario";
+  $("#mu-usuario").value = u ? u.usuario : "";
+  $("#mu-nombre").value = u ? u.nombre : "";
+  $("#mu-rol").value = u ? u.rol : "vendedor";
+  $("#mu-clave").value = "";
+  $("#mu-clave-nota").textContent = u ? "(dejala vacía para no cambiarla)" : "(mínimo 4 caracteres)";
+  $("#mu-activo").checked = u ? !!u.activo : true;
+  $("#mu-ok").dataset.id = u ? u.id : 0;
+  abrirModal("#m-usuario");
+  setTimeout(() => $("#mu-usuario").focus(), 60);
+}
+
+async function confirmarUsuario() {
+  const id = Number($("#mu-ok").dataset.id) || 0;
+  const btn = $("#mu-ok");
+  btn.disabled = true;
+  try {
+    await api("usuario_guardar", {
+      id,
+      usuario: $("#mu-usuario").value.trim().toLowerCase(),
+      nombre: $("#mu-nombre").value.trim(),
+      rol: $("#mu-rol").value,
+      clave: $("#mu-clave").value,
+      activo: $("#mu-activo").checked ? 1 : 0
+    });
+    cerrarModal("#m-usuario");
+    aviso(id ? "Usuario actualizado." : "Usuario creado. Le pedí que entre y cambie la clave.", "ok");
+    await cargarUsuarios();
+  } catch (e) {
+    aviso(e.message, "mal");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function borrarUsuario(id) {
+  const u = estado.usuarios.find(x => x.id === id);
+  if (!u) return;
+  const ok = await confirmar("Desactivar usuario",
+    "«" + u.nombre + "» (usuario " + u.usuario + ") ya no va a poder entrar al kiosco. "
+    + "Sus ventas y sus cajas quedan en el historial, así que no se borra nada.");
+  if (!ok) return;
+  try {
+    await api("usuario_borrar", { id });
+    aviso("Usuario desactivado.", "ok");
+    await cargarUsuarios();
+  } catch (e) { aviso(e.message, "mal"); }
+}
+
+async function cambiarMiClave() {
+  const datos = await pedirDatosClave();
+  if (!datos) return;
+  try {
+    await api("clave_cambiar", datos);
+    aviso("Clave cambiada.", "ok");
+  } catch (e) { aviso(e.message, "mal"); }
+}
+
+/* ---------- Ajustes: atajos y zonas ---------- */
+
+async function cargarAjustesCocina() {
+  if (!esAdmin()) return;
+  const [a, z] = await Promise.all([
+    api("comanda_atajos").catch(() => ({ atajos: [] })),
+    api("zonas").catch(() => ({ zonas: [] }))
+  ]);
+  estado.atajos = a.atajos || [];
+  estado.zonas = z.zonas || [];
+  renderAjustesAtajos();
+  renderAjustesZonas();
+}
+
+function renderAjustesAtajos() {
+  const tb = $("#atajos-tb");
+  if (!tb) return;
+  if (!estado.atajos.length) {
+    tb.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted)">Todavía no hay atajos.</td></tr>';
+    return;
+  }
+  tb.innerHTML = estado.atajos.map(a => {
+    const p = a.producto_id ? prodPorId(a.producto_id) : null;
+    return `<tr>
+      <td>${esc(a.seccion)}</td>
+      <td><b>${esc(a.etiqueta)}</b></td>
+      <td>${esc(a.texto || "—")}${a.detalle ? ' <span class="fuente">(' + esc(a.detalle) + ")</span>" : ""}</td>
+      <td class="fuente">${p ? esc(p.nombre) + (a.formato_unidad ? " · " + esc(a.formato_unidad) : "") : '<span style="opacity:.6">sólo texto</span>'}</td>
+      <td class="acciones">
+        <button class="btn sm" data-edit-atajo="${a.id}" title="Editar">✎</button>
+        <button class="btn sm peligro" data-borrar-atajo="${a.id}" title="Borrar">🗑</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function renderAjustesZonas() {
+  const tb = $("#zonas-tb");
+  if (!tb) return;
+  if (!estado.zonas.length) {
+    tb.innerHTML = '<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--muted)">No hay zonas cargadas.</td></tr>';
+    return;
+  }
+  tb.innerHTML = estado.zonas.map(z => `<tr>
+    <td>${esc(z.nombre)}</td>
+    <td class="num">${dinero(z.costo)}</td>
+    <td class="acciones">
+      <button class="btn sm" data-edit-zona="${z.id}" title="Editar">✎</button>
+      <button class="btn sm peligro" data-borrar-zona="${z.id}" title="Borrar">🗑</button>
+    </td>
+  </tr>`).join("");
+}
+
+let editAtajo = { id: 0, seccion: "", etiqueta: "", texto: "", detalle: "", producto_id: 0, formato_unidad: "", orden: 1 };
+let editZona = { id: 0, nombre: "", costo: 0 };
+
+function abrirAtajo(id) {
+  const a = id ? estado.atajos.find(x => x.id === id) : null;
+  editAtajo = a
+    ? { id: a.id, seccion: a.seccion, etiqueta: a.etiqueta, texto: a.texto || "", detalle: a.detalle || "", producto_id: a.producto_id || 0, formato_unidad: a.formato_unidad || "", orden: a.orden }
+    : { id: 0, seccion: "Comidas", etiqueta: "", texto: "", detalle: "", producto_id: 0, formato_unidad: "", orden: estado.atajos.length + 1 };
+
+  $("#atk-titulo").textContent = editAtajo.id ? "Editar atajo" : "Nuevo atajo";
+  $("#atk-seccion").value = editAtajo.seccion;
+  $("#atk-etiqueta").value = editAtajo.etiqueta;
+  $("#atk-texto").value = editAtajo.texto;
+  $("#atk-detalle").value = editAtajo.detalle;
+  $("#atk-orden").value = editAtajo.orden;
+
+  const sel = $("#atk-producto");
+  sel.innerHTML = '<option value="">— sólo texto, no cobra —</option>'
+    + estado.productos.filter(p => p.activo).map(p =>
+      '<option value="' + p.id + '">' + esc(p.nombre) + "</option>").join("");
+  sel.value = String(editAtajo.producto_id || 0);
+  refrescarFormatosAtajo();
+  abrirModal("#m-atajo");
+  setTimeout(() => $("#atk-etiqueta").focus(), 120);
+}
+
+function refrescarFormatosAtajo() {
+  const pid = Number($("#atk-producto").value) || 0;
+  const sel = $("#atk-formato");
+  const p = pid ? prodPorId(pid) : null;
+  const formatos = p ? (p.formatos_venta || []) : [];
+  sel.innerHTML = '<option value="">— el predeterminado —</option>'
+    + formatos.map(f => '<option value="' + esc(f.unidad) + '">' + esc(f.unidad) + " × " + numeroLocal(f.factor, 0) + "</option>").join("");
+  sel.value = editAtajo.formato_unidad || "";
+  sel.disabled = formatos.length === 0;
+}
+
+async function guardarAtajo() {
+  const datos = {
+    id: editAtajo.id,
+    seccion: $("#atk-seccion").value.trim() || "Comidas",
+    etiqueta: $("#atk-etiqueta").value.trim(),
+    texto: $("#atk-texto").value.trim(),
+    detalle: $("#atk-detalle").value.trim(),
+    producto_id: Number($("#atk-producto").value) || 0,
+    formato_unidad: $("#atk-formato").value || "",
+    orden: Number($("#atk-orden").value) || 0
+  };
+  try {
+    await api("atajo_guardar", datos);
+    cerrarModal("#m-atajo");
+    await cargarAjustesCocina();
+    if (estado.comanda) renderAtajos();
+    aviso("Atajo guardado.", "ok");
+  } catch (e) { aviso(e.message, "mal"); }
+}
+
+function abrirZona(id) {
+  const z = id ? estado.zonas.find(x => x.id === id) : null;
+  editZona = z ? { id: z.id, nombre: z.nombre, costo: z.costo } : { id: 0, nombre: "", costo: 0 };
+  $("#zn-titulo").textContent = editZona.id ? "Editar zona" : "Nueva zona";
+  $("#zn-nombre").value = editZona.nombre;
+  $("#zn-costo").value = editZona.costo;
+  abrirModal("#m-zona");
+  setTimeout(() => $("#zn-nombre").focus(), 120);
+}
+
+async function guardarZona() {
+  const datos = { id: editZona.id, nombre: $("#zn-nombre").value.trim(), costo: Number($("#zn-costo").value) || 0 };
+  try {
+    await api("zona_guardar", datos);
+    cerrarModal("#m-zona");
+    await cargarAjustesCocina();
+    aviso("Zona guardada.", "ok");
+  } catch (e) { aviso(e.message, "mal"); }
+}
+
+async function pedirDatosClave() {
+  const actual = await pedirClave("Cambiar mi clave", "Clave actual", "La que usás hoy", "");
+  if (actual === null) return null;
+  const nueva = await pedirClave("Cambiar mi clave", "Clave nueva", "Mínimo 4 caracteres", "");
+  if (nueva === null) return null;
+  const rep = await pedirClave("Cambiar mi clave", "Repetí la clave nueva", "", "");
+  if (rep === null) return null;
+  return { actual, nueva, repetir: rep };
+}
+
+/* =====================================================================
+    17. CARGA DE DATOS
+    ===================================================================== */
 async function cargarProductos() {
   const r = await api("productos");
   estado.productos = r.productos;
@@ -1347,10 +2976,29 @@ async function refrescarCabecera() {
   const r = await api("estado");
   estado.config = r.config;
   if (r.medios_pago && r.medios_pago.length) estado.mediosPago = r.medios_pago;
+  if (r.usuario) { estado.yo = r.usuario; estado.soyAdmin = !!r.usuario.es_admin; }
+  if (r.caja !== undefined) estado.caja = r.caja;
   aplicarMarca();
   $("#lbl-hoy-total").textContent = dinero(r.hoy.total);
   const d = new Date();
   $("#lbl-hoy").textContent = d.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
+  pintarEstadoCaja();
+}
+
+/** Franja de la barra superior: si tengo caja abierta y cuánto entró. */
+function pintarEstadoCaja() {
+  const caja = estado.caja;
+  const el = $("#mi-caja");
+  if (!el) return;
+  el.className = "sesion-caja " + (caja ? "abierto" : "cerrado");
+  const v = $("#mi-caja-val");
+  if (caja) {
+    v.textContent = "Abierta · " + dinero(caja.monto_inicial);
+    el.title = "Caja abierta desde las " + new Date(caja.abierta_en).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  } else {
+    v.textContent = "Cerrada";
+    el.title = "No tenés una caja abierta";
+  }
 }
 
 /* =====================================================================
@@ -1367,11 +3015,21 @@ function ir(vista) {
     if (!$("#h-desde").value) { $("#h-desde").value = hoyISO(); $("#h-hasta").value = hoyISO(); }
     renderHistorial();
   }
+  if (vista === "cajas") {
+    if (!$("#cj-desde").value) { $("#cj-desde").value = hoyISO().slice(0, 8) + "01"; $("#cj-hasta").value = hoyISO(); }
+    renderCajas();
+  }
   if (vista === "reportes") {
     if (!$("#r-desde").value) { $("#r-desde").value = hoyISO(); $("#r-hasta").value = hoyISO(); }
     renderReportes();
   }
   if (vista === "ajustes") renderAjustes();
+  if (vista === "cocina") {
+    arrancarPollingCocina();
+    cargarComandas().catch(e => aviso(e.message, "mal"));
+  } else if (estado.vista === "cocina") {
+    clearInterval(estado.cocTimer);
+  }
 }
 
 window.ir = ir;
@@ -1430,21 +3088,31 @@ function conectar() {
   });
 
   $("#carrito-items").addEventListener("click", e => {
-    const t = e.target;
-    if (t.dataset.mas) cambiarCantidad(t.dataset.mas, 1);
-    else if (t.dataset.menos) cambiarCantidad(t.dataset.menos, -1);
-    else if (t.dataset.quitar) quitarLinea(t.dataset.quitar);
+    const t = e.target.closest("button");
+    if (!t) return;
+    if (t.dataset.fmtLinea) {
+      // Cambiar de formato: si la linea destino ya existe, se le suma 1.
+      const id = Number(t.dataset.fmtLinea);
+      const nuevo = Number(t.dataset.fmtNuevo);
+      const actual = Number(t.dataset.fmtActual) || 0;
+      if (nuevo === actual) return;
+      cambiarFormato(id, nuevo);
+      return;
+    }
+    if (t.dataset.mas) cambiarCantidad(t.dataset.mas, 1, t.dataset.masFmt);
+    else if (t.dataset.menos) cambiarCantidad(t.dataset.menos, -1, t.dataset.menosFmt);
+    else if (t.dataset.quitar) quitarLinea(t.dataset.quitar, t.dataset.quitarFmt);
   });
 
   $("#carrito-items").addEventListener("change", e => {
     const inp = e.target;
     if (!inp.dataset.cant) return;
-    const v = Math.round(Number(inp.value) || 0);
-    if (v <= 0) quitarLinea(inp.dataset.cant);
-    else {
-      const l = estado.carrito.find(x => x.id === Number(inp.dataset.cant));
-      if (l) { l.cantidad = v; renderCarrito(); }
-    }
+    const id = Number(inp.dataset.cant);
+    const fId = Number(inp.dataset.cantFmt) || 0;
+    const v = r2(Number(inp.value) || 0);
+    if (v <= 0) { quitarLinea(id, fId); return; }
+    const l = estado.carrito.find(x => x.id === id && (x.formato_id || 0) === fId);
+    if (l) { l.cantidad = v; renderCarrito(); }
   });
 
   $("#btn-vaciar").addEventListener("click", async () => {
@@ -1465,6 +3133,139 @@ function conectar() {
   });
 
   $("#btn-cobrar").addEventListener("click", abrirCobro);
+
+  /* --- delivery / comanda --- */
+  escuchar("#btn-delivery", "click", abrirDelivery);
+
+  escuchar("#del-tipo", "click", e => {
+    const b = e.target.closest("button[data-tipo]");
+    if (!b) return;
+    estado.comanda.tipo = b.dataset.tipo;
+    $$("#del-tipo button").forEach(x => x.classList.toggle("on", x === b));
+    actualizarCamposDelivery();
+    refrescarEnvio();
+  });
+
+  escuchar("#del-zona", "change", aplicarZona);
+
+  escuchar("#del-atajos", "click", e => {
+    const b = e.target.closest("[data-atajo]");
+    if (!b) return;
+    usarAtajo(b.dataset.atajo);
+  });
+
+  escuchar("#del-texto", "input", e => {
+    // El detalle aparece sólo cuando hay algo que detallar.
+    $("#del-detalle-wrap").hidden = !e.target.value.trim();
+  });
+
+  escuchar("#del-texto", "keydown", e => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    agregarItemComanda({
+      texto: e.target.value.trim(),
+      detalle: $("#del-detalle").value.trim(),
+      producto_id: 0, cantidad: 1
+    });
+    e.target.value = "";
+    $("#del-detalle").value = "";
+    $("#del-detalle-wrap").hidden = true;
+  });
+
+  escuchar("#del-items", "click", e => {
+    const b = e.target.closest("[data-quitar-com]");
+    if (!b) return;
+    estado.comanda.items.splice(Number(b.dataset.quitarCom), 1);
+    renderItemsDelivery();
+  });
+
+  escuchar("#del-guardar", "click", () => {
+    leerCamposDelivery();
+    if (!estado.comanda.cliente) {
+      aviso("Poné el nombre del cliente.", "mal");
+      $("#del-cliente").focus();
+      return;
+    }
+    if (estado.comanda.tipo === "delivery" && !estado.comanda.direccion) {
+      aviso("Falta la dirección de entrega.", "mal");
+      $("#del-direccion").focus();
+      return;
+    }
+    if (estado.comanda.tipo === "mesa" && !estado.comanda.lugar) {
+      aviso("¿Qué mesa o lugar es?", "mal");
+      $("#del-lugar").focus();
+      return;
+    }
+    cerrarModal("#m-delivery");
+    renderBotonCobrar();
+    if (!estado.carrito.length) {
+      aviso("Esa comanda es sólo texto: agregá algún producto al ticket para poder cobrarla.", "aviso-w");
+      return;
+    }
+    abrirCobro();
+  });
+
+  /* --- delivery: ver o sacar la comanda armada --- */
+  escuchar("#btn-ver-comanda", "click", abrirDelivery);
+  escuchar("#btn-quitar-comanda", "click", () => {
+    estado.comanda = null;
+    renderCarrito();
+    aviso("Comanda quitada del ticket.");
+  });
+
+  /* --- tablero de cocina --- */
+  escuchar("#coc-filtros", "click", e => {
+    const b = e.target.closest("button[data-coc]");
+    if (!b) return;
+    estado.cocFiltro = b.dataset.coc;
+    $$("#coc-filtros button").forEach(x => x.classList.toggle("on", x === b));
+    cargarComandas().catch(e => aviso(e.message, "mal"));
+  });
+
+  escuchar("#coc-tablero", "click", async e => {
+    const btnEstado = e.target.closest("[data-estado-com]");
+    const btnItem   = e.target.closest("[data-item-com]");
+    const btnPrint  = e.target.closest("[data-print-com]");
+    try {
+      if (btnEstado) {
+        const art = btnEstado.closest("[data-comanda]");
+        btnEstado.disabled = true;
+        await moverComanda(Number(art.dataset.comanda), btnEstado.dataset.estadoCom);
+      } else if (btnItem) {
+        btnItem.disabled = true;
+        await marcarItem(Number(btnItem.dataset.itemCom));
+      } else if (btnPrint) {
+        imprimirComanda(Number(btnPrint.dataset.printCom));
+      }
+    } catch (err) {
+      aviso(err.message, "mal");
+    }
+  });
+
+  /* --- ajustes de atajos y zonas --- */
+  escuchar("#btn-atajo-nuevo", "click", () => abrirAtajo(0));
+  escuchar("#btn-zona-nueva", "click", () => abrirZona(0));
+  escuchar("#atajos-tb", "click", async e => {
+    const ed = e.target.closest("[data-edit-atajo]");
+    const bo = e.target.closest("[data-borrar-atajo]");
+    if (ed) abrirAtajo(Number(ed.dataset.editAtajo));
+    if (bo) await confirmar("Borrar el atajo", "Se pierde el botón, no los productos.", async () => {
+      await api("atajo_borrar", { id: Number(bo.dataset.borrarAtajo) });
+      await cargarAjustesCocina();
+    });
+  });
+  escuchar("#zonas-tb", "click", async e => {
+    const ed = e.target.closest("[data-edit-zona]");
+    const bo = e.target.closest("[data-borrar-zona]");
+    if (ed) abrirZona(Number(ed.dataset.editZona));
+    if (bo) await confirmar("Borrar la zona", "Las comandas viejas guardan el nombre.", async () => {
+      await api("zona_borrar", { id: Number(bo.dataset.borrarZona) });
+      await cargarAjustesCocina();
+    });
+  });
+  escuchar("#atk-producto", "change", refrescarFormatosAtajo);
+  escuchar("#atk-guardar", "click", guardarAtajo);
+  escuchar("#zn-guardar", "click", guardarZona);
 
   /* --- cobro --- */
   $$("#cob-metodos .metodo").forEach(b => b.addEventListener("click", () => {
@@ -1496,7 +3297,7 @@ function conectar() {
     const t = e.target;
     if (t.dataset.editar) abrirProducto(t.dataset.editar);
     else if (t.dataset.borrar) borrarProducto(t.dataset.borrar);
-    else if (t.dataset.stock) abrirStock("entrada");
+    else if (t.dataset.stock) abrirStock("entrada", t.dataset.stock);
   });
 
   $("#txt-buscar-p").addEventListener("input", e => { estado.busquedaP = e.target.value; renderProductos(); });
@@ -1509,9 +3310,16 @@ function conectar() {
     e.target.value = "";
   });
 
+  /* --- producto rápido (venta espontánea) --- */
+  $("#btn-rapido").addEventListener("click", abrirRapido);
+  $("#pr-guardar").addEventListener("click", guardarRapido);
+  $("#pr-nombre").addEventListener("input", avisarExisteRapido);
+  $("#pr-nombre").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); guardarRapido(); }
+  });
+
   /* --- modal producto --- */
-  $("#mp-guardar").addEventListener("click", guardarProducto);
-  $("#mp-btn-foto").addEventListener("click", () => $("#mp-file").click());
+  $("#mp-guardar").addEventListener("click", guardarProducto);  $("#mp-btn-foto").addEventListener("click", () => $("#mp-file").click());
   $("#mp-file").addEventListener("change", e => {
     const f = e.target.files[0];
     if (f) leerImagen(f);
@@ -1606,6 +3414,33 @@ function conectar() {
   /* --- margen en vivo --- */
   ["#mp-precio", "#mp-costo"].forEach(s => $(s).addEventListener("input", refrescarMargen));
 
+  /* --- formatos de compra y de venta --- */
+  ["#ms-cant", "#ms-precio-compra"]
+    .forEach(s => { const e = $(s); if (e) e.addEventListener("input", refrescarPreviewStock); });
+  const selFmtCompra = $("#ms-formato-compra");
+  if (selFmtCompra) selFmtCompra.addEventListener("change", aplicarFormatoCompra);
+  const selUnidad = $("#mp-unidad");
+  if (selUnidad) selUnidad.addEventListener("change", refrescarUnidadesBase);
+  [["#mp-add-compra", "compra"], ["#mp-add-venta", "venta"]].forEach(([sel, amb]) => {
+    const b = $(sel);
+    if (b) b.addEventListener("click", () => agregarFilaFormato(amb));
+  });
+
+  // Datalists con el catalogo de formatos (sugeren el nombre, el factor lo
+  // completa el JS cuando coincide con un multiplo conocido).
+  const ancla = $("#m-prod");
+  ["compra", "venta"].forEach(amb => {
+    let dl = document.getElementById("cat-fmt-" + amb);
+    if (!dl && ancla) {
+      dl = document.createElement("datalist");
+      dl.id = "cat-fmt-" + amb;
+      ancla.appendChild(dl);
+    }
+    if (!dl) return;
+    dl.innerHTML = CATALOGO_FORMATOS[amb]
+      .map(([n]) => `<option value="${esc(n)}">`).join("");
+  });
+
   $$("[data-limpiar]").forEach(b => b.addEventListener("click", async () => {
     const que = b.dataset.limpiar;
     const textos = {
@@ -1682,16 +3517,82 @@ async function exportarVentas() {
 }
 
 /* =====================================================================
-   19. ARRANQUE
-   ===================================================================== */
+    19. ARRANQUE
+    ===================================================================== */
+function conectarSesion() {
+  // Menú de la cuenta
+  const btn = $("#btn-usuario"), lista = $("#menu-usuario-lista");
+  if (btn && lista) {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      lista.classList.toggle("on");
+    });
+    document.addEventListener("click", () => lista.classList.remove("on"));
+    lista.addEventListener("click", (e) => e.stopPropagation());
+    $$("#menu-usuario-lista [data-ir]").forEach(b =>
+      b.addEventListener("click", () => {
+        lista.classList.remove("on");
+        // "Usuarios" no es una vista propia: vive dentro de Ajustes.
+        if (b.dataset.ir === "usuarios") {
+          ir("ajustes");
+          const ancla = $("#usuarios");
+          if (ancla) ancla.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else {
+          ir(b.dataset.ir);
+        }
+      }));
+    $$("#menu-usuario-lista [data-accion]").forEach(b =>
+      b.addEventListener("click", () => { lista.classList.remove("on"); cambiarMiClave(); }));
+  }
+  // Atajo a la caja desde la franja de arriba
+  const mc = $("#mi-caja");
+  if (mc) mc.addEventListener("click", () => ir("cajas"));
+
+  // Modales de caja
+  const on = (sel, ev, fn) => { const e = $(sel); if (e) e.addEventListener(ev, fn); };
+  on("#ac-ok", "click", confirmarAbrirCaja);
+  on("#cc-ok", "click", confirmarCerrarCaja);
+  on("#cd-imprimir", "click", imprimirCaja);
+  on("#mu-ok", "click", confirmarUsuario);
+  on("#cj-buscar", "click", cargarListaCajas);
+  on("#btn-us-nuevo", "click", () => guardarUsuario(0));
+
+  // Enter para confirmar en los modales de caja
+  ["#ac-monto", "#cc-motivo", "#mu-clave"].forEach(sel => {
+    const e = $(sel);
+    if (!e) return;
+    e.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      const v = $(sel).closest(".velo");
+      const ok = { "#ac-monto": "#ac-ok", "#cc-motivo": "#cc-ok", "#mu-clave": "#mu-ok" }[sel];
+      if (v && ok) $(ok).click();
+    });
+  });
+}
+
 async function iniciar() {
   conectar();
+  conectarSesion();
   try {
+    if (esCocina()) {
+      // La cocina entra directo a su tablero: no toca caja, ventas ni stock.
+      $$("#tabs button").forEach(b => {
+        if (b.dataset.v !== "cocina") b.hidden = true;
+      });
+      await cargarProductos();
+      ir("cocina");
+      return;
+    }
     await Promise.all([cargarProductos(), refrescarCabecera(), cargarProveedores()]);
     if (estado.config.tema === "ocuro") document.body.classList.add("t.ocuro");
     aplicarMarca();
     renderPOS();
     $("#txt-buscar").focus();
+    // Zonas y atajos se cargan siempre: el botón de delivery los necesita.
+    api("comanda_atajos").then(r => { estado.atajos = r.atajos || []; }).catch(() => {});
+    api("zonas").then(r => { estado.zonas = r.zonas || []; }).catch(() => {});
+    if (esAdmin()) cargarAjustesCocina().catch(() => {});
   } catch (e) {
     document.body.innerHTML = '<div class="vacio" style="height:100vh">'
       + '<div class="ico">⚠️</div><h3>No se pudo conectar con el sistema</h3>'

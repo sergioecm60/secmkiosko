@@ -5,6 +5,7 @@
  */
 declare(strict_types=1);
 require __DIR__ . '/config.php';
+require __DIR__ . '/sesion.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -107,8 +108,11 @@ function prod(array $f): array
         'proveedor_id'   => isset($f['proveedor_id']) && $f['proveedor_id'] !== null ? (int) $f['proveedor_id'] : 0,
         'proveedor'      => $f['proveedor'] ?? '',
         'stock'     => (float) $f['stock'],
+        'unidad'         => $f['unidad'] ?: 'pieza',
+        'formatos_compra' => formatosProducto((int) $f['id'], 'compra'),
+        'formatos_venta'  => formatosProducto((int) $f['id'], 'venta', $costo, $precio),
         'minimo'    => (float) $f['minimo'],
-        'unidad'    => $f['unidad'] ?: 'pieza',
+        'sin_stock' => (int) ($f['sin_stock'] ?? 0) === 1,
         'foto'      => $f['foto'] ?? '',
         'activo'    => (int) $f['activo'] === 1,
         'creado'    => $f['creado'] ?? null,
@@ -132,6 +136,138 @@ function mediosPago(bool $soloActivos = true): array
     ], pdoBd()->query($sql)->fetchAll());
 }
 
+/**
+ * Reemplaza por completo la lista de formatos de un ambito.
+ * Cada fila: { unidad, factor, precio, margen, predet }.
+ * Las que vengan sin unidad se ignoran; si no llega la lista, no se toca nada
+ * (asi una edicion parcial no borra lo que ya estaba).
+ */
+function guardarFormatos(PDO $bd, int $productoId, $lista, string $ambito): void
+{
+    if ($lista === null || !is_array($lista)) {
+        return;
+    }
+    $bd->prepare('DELETE FROM productos_formatos WHERE producto_id = ? AND ambito = ?')
+       ->execute([$productoId, $ambito]);
+
+    $ins = $bd->prepare('INSERT INTO productos_formatos (producto_id, ambito, unidad, factor, precio, margen, predet)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)');
+
+    // Solo un formato queda como predeterminado: si el cliente marco varios,
+    // gana el ultimo. Si no marco ninguno, se usa el primero.
+    $cuantas = 0;
+    foreach ($lista as $f) {
+        if (is_array($f) && !empty($f['predet'])) {
+            $cuantas++;
+        }
+    }
+    $indicePredet = -1;
+    if ($cuantas > 0) {
+        $vistos = 0;
+        foreach ($lista as $i => $f) {
+            if (is_array($f) && !empty($f['predet'])) {
+                $indicePredet = $i;
+            }
+        }
+    }
+
+    $primerVálido = -1;
+    foreach ($lista as $i => $f) {
+        if (!is_array($f) || texto($f['unidad'] ?? '', 20) === '') {
+            continue;
+        }
+        if ($primerVálido < 0) {
+            $primerVálido = $i;
+        }
+    }
+    if ($indicePredet < 0) {
+        $indicePredet = $primerVálido;
+    }
+
+    foreach ($lista as $i => $f) {
+        if (!is_array($f)) {
+            continue;
+        }
+        $unidad = texto($f['unidad'] ?? '', 20);
+        if ($unidad === '') {
+            continue;
+        }
+        $factor = isset($f['factor']) && is_numeric($f['factor']) ? (float) $f['factor'] : 1.0;
+        if ($factor <= 0) {
+            $factor = 1.0;
+        }
+        $precio = isset($f['precio']) && $f['precio'] !== '' && is_numeric($f['precio'])
+            ? redondear((float) $f['precio']) : null;
+        $margen = isset($f['margen']) && $f['margen'] !== '' && is_numeric($f['margen'])
+            ? (float) $f['margen'] : null;
+        $ins->execute([$productoId, $ambito, $unidad, $factor, $precio, $margen, $i === $indicePredet ? 1 : 0]);
+    }
+    return;
+    // Si ninguna quedo marcada como predeterminada, la primera es la de uso.
+    if ($primero) {
+        $st = $bd->prepare('SELECT id FROM productos_formatos WHERE producto_id = ? AND ambito = ?
+                             ORDER BY factor ASC, id ASC LIMIT 1');
+        $st->execute([$productoId, $ambito]);
+        if ($fila = $st->fetch()) {
+            $bd->prepare('UPDATE productos_formatos SET predet = 1 WHERE id = ?')->execute([(int) $fila['id']]);
+        }
+    }
+}
+
+/**
+ * Costo por unidad base del producto, tomado del formato de compra
+ * predeterminado. Es lo que despues usa el % de margen de los formatos de
+ * venta para sugerir precios.
+ */
+function costoProducto(PDO $bd, int $productoId): float
+{
+    $st = $bd->prepare('SELECT costo FROM productos WHERE id = ?');
+    $st->execute([$productoId]);
+    return (float) ($st->fetchColumn() ?: 0);
+}
+
+/**
+ * Busca un formato por nombre y cantidad. Los ids de formato cambian cada vez
+ * que se guarda el producto, asi que un carrito armado antes de un cambio
+ * se resuelve igual por "docena x 12" o "maple x 30".
+ */
+function formatoPorNombre(PDO $bd, int $productoId, string $ambito, string $unidad, ?float $factor): ?array
+{
+    $unidad = trim($unidad);
+    if ($unidad === '') {
+        return null;
+    }
+    $st = $bd->prepare('SELECT * FROM productos_formatos
+                         WHERE producto_id = ? AND ambito = ? AND LOWER(unidad) = LOWER(?)');
+    $st->execute([$productoId, $ambito, $unidad]);
+    $candidatos = $st->fetchAll();
+    if (!$candidatos) {
+        return null;
+    }
+    if ($factor !== null && $factor > 0) {
+        foreach ($candidatos as $f) {
+            if (abs((float) $f['factor'] - $factor) < 0.0001) {
+                return $f;
+            }
+        }
+    }
+    return $candidatos[0];
+}
+
+function costoBaseDe(PDO $bd, int $productoId): ?float
+{
+    $st = $bd->prepare('SELECT unidad, factor, precio FROM productos_formatos
+                         WHERE producto_id = ? AND ambito = "compra" AND precio IS NOT NULL AND precio > 0
+                      ORDER BY predet DESC, id ASC LIMIT 1');
+    $st->execute([$productoId]);
+    $f = $st->fetch();
+    if (!$f) {
+        return null;
+    }
+    $factor = (float) $f['factor'] > 0 ? (float) $f['factor'] : 1.0;
+    return redondear((float) $f['precio'] / $factor);
+}
+
 function venta(array $f): array
 {
     return [
@@ -141,6 +277,7 @@ function venta(array $f): array
         'subtotal'   => (float) $f['subtotal'],
         'descuento'  => (float) $f['descuento'],
         'total'      => (float) $f['total'],
+        'envio'      => (float) ($f['envio'] ?? 0),
         'metodo'     => $f['metodo'],
         'recibido'   => $f['recibido'] === null ? null : (float) $f['recibido'],
         'vuelto'     => $f['vuelto'] === null ? null : (float) $f['vuelto'],
@@ -151,6 +288,160 @@ function venta(array $f): array
     ];
 }
 
+/**
+ * Detalle de una venta con la unidad del producto, para poder mostrar
+ * "250 g" en vez de "0,25 pieza" en la pantalla y en el ticket.
+ */
+function itemsDe(PDO $bd, int $ventaId): array
+{
+    $st = $bd->prepare(
+        'SELECT vi.nombre, vi.codigo, vi.precio, vi.cantidad, vi.importe,
+                vi.formato_unidad, vi.formato_cantidad,
+                COALESCE(pr.unidad, "pieza") AS unidad
+         FROM venta_items vi
+         LEFT JOIN productos pr ON pr.id = vi.producto_id
+         WHERE vi.venta_id = ? ORDER BY vi.id'
+    );
+    $st->execute([$ventaId]);
+    return array_map(fn($i) => [
+        'nombre'   => $i['nombre'],
+        'codigo'   => $i['codigo'] ?? '',
+        'precio'   => (float) $i['precio'],
+        'cantidad' => (float) $i['cantidad'],
+        'importe'  => (float) $i['importe'],
+        'unidad'   => $i['unidad'] ?: 'pieza',
+        'formato'      => $i['formato_unidad'] ?: null,
+        'cant_formato' => $i['formato_unidad'] !== null ? (float) $i['formato_cantidad'] : null,
+    ], $st->fetchAll());
+}
+
+/* ---------------------------------------------------------------
+   Comandas de cocina
+   --------------------------------------------------------------- */
+
+/** Estados por los que pasa un pedido, en orden. */
+const ESTADOS_COMANDA = ['pendiente', 'preparando', 'listo', 'entregado', 'cancelado'];
+
+/**
+ * Guarda la comanda y sus lineas. Se llama DENTRO de la transaccion de la
+ * venta, asi que si algo falla se cae la venta entera: nunca queda una
+ * comanda de un pedido que no se cobro.
+ *
+ * Cada linea puede venir de un atajo con producto_id (esa ya se cobro como
+ * parte del carrito) o ser solo texto para la cocina.
+ */
+function guardarComanda(PDO $bd, array $d, int $ventaId, int $folio, float $total, string $usuario, float $envio = 0.0): int
+{
+    $cliente = trim((string) ($d['cliente'] ?? ''));
+    if ($cliente === '') {
+        throw new RuntimeException('La comanda necesita el nombre del cliente.');
+    }
+    $items = $d['items'] ?? [];
+    if (!is_array($items) || count($items) === 0) {
+        throw new RuntimeException('La comanda no tiene nada que preparar.');
+    }
+
+    $tipo = in_array($d['tipo'] ?? '', ['delivery', 'retiro', 'mesa'], true) ? (string) $d['tipo'] : 'delivery';
+    $zonaId = entero($d['zona_id'] ?? 0);
+    $zonaNombre = trim((string) ($d['zona_nombre'] ?? ''));
+    $costoZona = 0.0;
+    if ($zonaId <= 0) {
+        $zonaId = null;
+        $zonaNombre = '';
+    } else {
+        // El nombre y el costo salen de la tabla, no de lo que manda el
+        // navegador: el precio del reparto no se negocia desde el cliente.
+        $stZ = $bd->prepare('SELECT nombre, costo FROM zonas WHERE id = ? AND activo = 1');
+        $stZ->execute([$zonaId]);
+        $z = $stZ->fetch();
+        if (!$z) {
+            throw new RuntimeException('La zona elegida ya no existe.');
+        }
+        $zonaNombre = (string) $z['nombre'];
+        $costoZona = (float) $z['costo'];
+    }
+    // El envio solo suma si el pedido es a domicilio.
+    $envio = $tipo === 'delivery' ? $costoZona : 0.0;
+
+    $st = $bd->prepare(
+        'INSERT INTO comandas (venta_id,folio,cliente,telefono,direccion,zona_id,zona_nombre,
+                                tipo,lugar,notas,estado,total,envio,usuario)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    );
+    $st->execute([
+        $ventaId, $folio, mb_substr($cliente, 0, 80),
+        trim((string) ($d['telefono'] ?? '')) ?: null,
+        trim((string) ($d['direccion'] ?? '')) ?: null,
+        $zonaId, $zonaNombre ?: null,
+        $tipo, trim((string) ($d['lugar'] ?? '')) ?: null,
+        trim((string) ($d['notas'] ?? '')) ?: null,
+        'pendiente', $total, $envio, $usuario,
+    ]);
+    $comandaId = (int) $bd->lastInsertId();
+
+    $stIt = $bd->prepare(
+        'INSERT INTO comanda_items (comanda_id,producto_id,cantidad,texto,detalle,es_producto)
+         VALUES (?,?,?,?,?,?)'
+    );
+    foreach ($items as $it) {
+        if (!is_array($it)) {
+            continue;
+        }
+        $texto = trim((string) ($it['texto'] ?? ''));
+        if ($texto === '') {
+            continue;
+        }
+        $pid = entero($it['producto_id'] ?? 0);
+        $cant = redondear(numero($it['cantidad'] ?? 1));
+        if ($cant <= 0) {
+            $cant = 1.0;
+        }
+        $detalle = trim((string) ($it['detalle'] ?? ''));
+        $stIt->execute([$comandaId, $pid > 0 ? $pid : null, $cant,
+                        mb_substr($texto, 0, 160), $detalle ?: null, $pid > 0 ? 1 : 0]);
+    }
+
+    $n = (int) $bd->query('SELECT COUNT(*) FROM comanda_items WHERE comanda_id = ' . $comandaId)->fetchColumn();
+    if ($n === 0) {
+        throw new RuntimeException('La comanda no tiene nada que preparar.');
+    }
+    return $comandaId;
+}
+
+/** Devuelve una comanda con sus lineas, en el formato que espera la cocina. */
+function comandaCompleta(PDO $bd, int $id): ?array
+{
+    $st = $bd->prepare('SELECT * FROM comandas WHERE id = ?');
+    $st->execute([$id]);
+    $c = $st->fetch();
+    if (!$c) {
+        return null;
+    }
+    $stI = $bd->prepare(
+        'SELECT ci.*, COALESCE(p.nombre, "") AS producto_nombre
+         FROM comanda_items ci
+         LEFT JOIN productos p ON p.id = ci.producto_id
+         WHERE ci.comanda_id = ? ORDER BY ci.id'
+    );
+    $stI->execute([$id]);
+    $c['items'] = array_map(fn($i) => [
+        'id'        => (int) $i['id'],
+        'producto_id' => $i['producto_id'] !== null ? (int) $i['producto_id'] : null,
+        'cantidad'  => (float) $i['cantidad'],
+        'texto'     => (string) $i['texto'],
+        'detalle'   => $i['detalle'] ?: null,
+        'es_producto' => (int) $i['es_producto'] === 1,
+        'estado'    => (string) $i['estado'],
+    ], $stI->fetchAll());
+    $c['id']     = (int) $c['id'];
+    $c['folio']  = $c['folio'] !== null ? (int) $c['folio'] : null;
+    $c['total']  = (float) $c['total'];
+    $c['envio']  = (float) ($c['envio'] ?? 0);
+    $c['zona_id'] = $c['zona_id'] !== null ? (int) $c['zona_id'] : 0;
+    $c['es_producto'] = 0;
+    return $c;
+}
+
 /* ---------- Arranque ---------- */
 if (!instalado()) {
     salida(['ok' => false, 'error' => 'El sistema no esta instalado. Abre instalar.php', 'instalar' => true], 503);
@@ -158,6 +449,103 @@ if (!instalado()) {
 
 $accion = (string) ($_GET['accion'] ?? '');
 $bd     = pdoBd();
+
+/* ---------- Permisos por acción ----------
+   publico      : no hace falta entrar
+   autenticado : cualquier usuario con sesión (admin, vendedor o cocina)
+   venta        : sólo quien cobra (admin o vendedor) — la cocina no
+   admin        : sólo el administrador
+ ------------------------------------------------ */
+const ROL_PUBLICO      = 'publico';
+const ROL_AUTENTICADO = 'autenticado';
+const ROL_VENTA        = 'venta';
+const ROL_ADMIN       = 'admin';
+
+$permisos = [
+    // Público
+    'ping'              => ROL_PUBLICO,
+    'sesion_info'       => ROL_PUBLICO,
+    'login'             => ROL_PUBLICO,
+
+    // Cualquiera que haya entrado
+    'estado'            => ROL_AUTENTICADO,
+    'categorias'        => ROL_AUTENTICADO,
+    'medios_pago'       => ROL_AUTENTICADO,
+    'productos'         => ROL_AUTENTICADO,
+    'producto'          => ROL_AUTENTICADO,
+    'proveedores'       => ROL_AUTENTICADO,
+    'kardex'            => ROL_AUTENTICADO,
+    'ventas'            => ROL_VENTA,
+    'venta'             => ROL_VENTA,
+    'reportes'          => ROL_VENTA,
+    'venta_crear'       => ROL_VENTA,
+    'venta_anular'      => ROL_VENTA,   // el vendedor sólo con su caja abierta
+    'caja_abrir'        => ROL_VENTA,
+    'caja_cerra'        => ROL_VENTA,
+    'cajas_mias'        => ROL_VENTA,
+    'clave_cambiar'     => ROL_AUTENTICADO,
+
+    // Comandas: las ve y las mueve cualquiera (incluido el de cocina),
+    // pero crearlas es parte del cobro, asi que es ROL_VENTA.
+    'comandas'          => ROL_AUTENTICADO,
+    'comanda'           => ROL_AUTENTICADO,
+    'comanda_estado'    => ROL_AUTENTICADO,
+    'comanda_item'      => ROL_AUTENTICADO,
+    'comanda_atajos'    => ROL_AUTENTICADO,
+    'zonas'             => ROL_AUTENTICADO,
+    'atajo_guardar'     => ROL_ADMIN,
+    'atajo_borrar'      => ROL_ADMIN,
+    'zona_guardar'      => ROL_ADMIN,
+    'zona_borrar'       => ROL_ADMIN,
+
+    // Sólo administrador
+    'config_guardar'    => ROL_ADMIN,
+    'producto_guardar'  => ROL_ADMIN,
+    'producto_borrar'   => ROL_ADMIN,
+    'stock_mover'       => ROL_ADMIN,
+    'proveedor_guardar' => ROL_ADMIN,
+    'proveedor_borrar'  => ROL_ADMIN,
+    'medio_pago_guardar'=> ROL_ADMIN,
+    'medio_pago_borrar' => ROL_ADMIN,
+    'kiosco_limpiar'    => ROL_ADMIN,
+    'usuarios'          => ROL_ADMIN,
+    'usuario_guardar'   => ROL_ADMIN,
+    'usuario_borrar'    => ROL_ADMIN,
+    'cajas_todas'       => ROL_VENTA,   // el vendedor sólo recibe las suyas (filtro abajo)
+    'caja_detalle'      => ROL_VENTA,   // el vendedor sólo las propias (se chequea abajo)
+];
+
+$requerido = $permisos[$accion] ?? ROL_AUTENTICADO;
+
+if ($requerido !== ROL_PUBLICO) {
+    exigirSesion(function () {
+        salida(['ok' => false, 'error' => 'Tu sesión se venció. Volvé a entrar.', 'sesion' => true], 401);
+    });
+    if ($requerido === ROL_ADMIN && !esAdmin()) {
+        salida([
+            'ok'     => false,
+            'error'  => 'Sólo el administrador puede hacer esto.',
+            'permiso' => true,
+        ], 403);
+    }
+    // La cocina prepara pedidos pero no cobra: no entra al punto de venta.
+    if ($requerido === ROL_VENTA && !puedeVender()) {
+        salida([
+            'ok'      => false,
+            'error'   => 'Tu rol no puede cobrar ni manejar la caja.',
+            'permiso' => true,
+        ], 403);
+    }
+    // Mientras la clave sea la de fábrica no se opera el kiosco.
+    $u = usuarioActual();
+    if ($u && (int) $u['debe_cambiar_clave'] === 1 && !in_array($accion, ['clave_cambiar', 'sesion_info'], true)) {
+        salida([
+            'ok'    => false,
+            'error' => 'Tenés que cambiar la clave antes de empezar a vender.',
+            'clave' => true,
+        ], 428);
+    }
+}
 
 try {
     switch ($accion) {
@@ -167,6 +555,8 @@ try {
            ============================================================ */
         case 'estado': {
             $cfg = leerConfig();
+            $yo  = usuarioActual();
+            $miCaja = $yo ? cajaDeUsuario((int) $yo['id']) : null;
 
             $st = $bd->prepare('SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS t
                                 FROM ventas WHERE anulada = 0 AND DATE(fecha) = CURDATE()');
@@ -191,6 +581,14 @@ try {
                 'valor_inventario'   => redondear((float) $inv['v']),
                 'costo_inventario'   => redondear((float) $inv['c']),
                 'medios_pago'        => mediosPago(),
+                'usuario'            => $yo ? [
+                    'id'       => (int) $yo['id'],
+                    'usuario'  => $yo['usuario'],
+                    'nombre'   => $yo['nombre'],
+                    'rol'      => $yo['rol'],
+                    'es_admin' => $yo['rol'] === 'admin',
+                ] : null,
+                'caja'               => cajaResumen($miCaja),
                 'php_version'        => PHP_VERSION,
                 'mysql_version'      => (string) $bd->query('SELECT VERSION()')->fetchColumn(),
                 'servidor'           => $_SERVER['SERVER_SOFTWARE'] ?? 'desconocido',
@@ -265,6 +663,16 @@ try {
             $costo     = p('costo') === null ? 0.0 : max(0, pNum('costo'));
             $obs       = pTxt('observaciones', 500);
             $provId    = pInt('proveedor_id', 0);
+            // Venta espontanea: el producto se carga en el momento y se cobra,
+            // pero no sale de un stock que se cuente (ver seccion 9 del esquema).
+            $sinStock  = ((string) p('sin_stock', '0')) === '1' ? 1 : 0;
+
+            // Compra en multiplos: maple, cajon, bolsa, docena...
+            $uCompra    = pTxt('unidad_compra', 20);
+            $factorCompra = p('factor_compra') === null ? 1.0 : max(0.001, pNum('factor_compra', 1));
+            $pCompra    = p('precio_compra') === null || pNum('precio_compra') <= 0
+                            ? null : redondear(pNum('precio_compra'));
+            $presetTxt  = pTxt('presets', 120) ?: null;
 
             // Codigo repetido
             if ($codigo !== '') {
@@ -295,6 +703,14 @@ try {
                     $costo     = p('costo') === null ? (float) $viejo['costo'] : $costo;
                     $obs       = p('observaciones') === null ? (string) $viejo['observaciones'] : $obs;
                     $provId    = p('proveedor_id') === null ? (int) $viejo['proveedor_id'] : $provId;
+                    if (p('sin_stock') === null) { $sinStock = (int) ($viejo['sin_stock'] ?? 0); }
+                    if (p('unidad_compra') === null) { $uCompra = (string) ($viejo['unidad_compra'] ?? ''); }
+                    if (p('factor_compra') === null) { $factorCompra = (float) ($viejo['factor_compra'] ?? 1); }
+                    if (p('precio_compra') === null) {
+                        $pCompra = isset($viejo['precio_compra']) && $viejo['precio_compra'] !== null
+                            ? (float) $viejo['precio_compra'] : null;
+                    }
+                    if (p('presets') === null) { $presetTxt = $viejo['presets'] ?? null; }
                     $stockViejo = (float) $viejo['stock'];
                     $stockNuevo = $stockViejo;
                     if (p('stock') !== null) {
@@ -302,13 +718,15 @@ try {
                     }
                     $st = $bd->prepare(
                         'UPDATE productos SET nombre=?, codigo=?, categoria=?, precio=?, costo=?, stock=?, minimo=?,
-                                             unidad=?, foto=?, activo=?, observaciones=?, proveedor_id=?
+                                             unidad=?, foto=?, sin_stock=?, activo=?, observaciones=?, proveedor_id=?,
+                                             unidad_compra=?, factor_compra=?, precio_compra=?, presets=?
                          WHERE id = ?'
                     );
                     $st->execute([$nombre, $codigo ?: null, $categoria ?: null, $precio, $costo, $stockNuevo,
-                                  $minimo, $unidad, $foto ?: null, $activo, $obs ?: null, $provId ?: null, $id]);
+                                  $minimo, $unidad, $foto ?: null, $sinStock, $activo, $obs ?: null, $provId ?: null,
+                                  $uCompra ?: null, $factorCompra, $pCompra, $presetTxt, $id]);
                     $dif = redondear($stockNuevo - $stockViejo);
-                    if ($dif !== 0.0) {
+                    if ($dif !== 0.0 && !$sinStock) {
                         registrarMovimiento([
                             'tipo' => $dif > 0 ? 'entrada' : 'salida',
                             'producto_id' => $id, 'producto_nombre' => $nombre,
@@ -317,24 +735,61 @@ try {
                         ]);
                     }
                 } else {
-                    $stock = pNum('stock');
+                    $stock = $sinStock ? 0.0 : pNum('stock');
                     $st = $bd->prepare(
-                        'INSERT INTO productos (nombre,codigo,categoria,precio,costo,stock,minimo,unidad,foto,activo,observaciones,proveedor_id)
-                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+                        'INSERT INTO productos (nombre,codigo,categoria,precio,costo,stock,minimo,unidad,foto,sin_stock,activo,observaciones,proveedor_id,
+                                                unidad_compra,factor_compra,precio_compra,presets)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                     );
                     $st->execute([$nombre, $codigo ?: null, $categoria ?: null, $precio, $costo, $stock,
-                                  $minimo, $unidad, $foto ?: null, $activo, $obs ?: null, $provId ?: null]);
+                                  $minimo, $unidad, $foto ?: null, $sinStock, $activo, $obs ?: null, $provId ?: null,
+                                  $uCompra ?: null, $factorCompra, $pCompra, $presetTxt]);
                     $id = (int) $bd->lastInsertId();
-                    registrarMovimiento([
-                        'tipo' => 'alta', 'producto_id' => $id, 'producto_nombre' => $nombre,
-                        'cantidad' => redondear($stock), 'stock_anterior' => 0, 'stock_actual' => $stock,
-                        'referencia' => 'Alta de producto', 'usuario' => nombreUsuario(),
-                    ]);
+                    // Un producto de venta libre no tiene existencias: no se
+                    // inventa un movimiento de alta con stock 0.
+                    if (!$sinStock) {
+                        registrarMovimiento([
+                            'tipo' => 'alta', 'producto_id' => $id, 'producto_nombre' => $nombre,
+                            'cantidad' => redondear($stock), 'stock_anterior' => 0, 'stock_actual' => $stock,
+                            'referencia' => 'Alta de producto', 'usuario' => nombreUsuario(),
+                        ]);
+                    }
                 }
                 $bd->commit();
             } catch (Throwable $e) {
                 $bd->rollBack();
                 throw $e;
+            }
+
+            guardarFormatos($bd, $id, p('formatos_compra'), 'compra');
+            guardarFormatos($bd, $id, p('formatos_venta'), 'venta');
+
+            // El costo del producto sale del formato de compra predeterminado:
+            // maple de $5.000 entre 30 huevos = $166,67 por huevo.
+            $costoBase = costoBaseDe($bd, $id);
+            if ($costoBase !== null) {
+                $bd->prepare('UPDATE productos SET costo = ? WHERE id = ?')->execute([$costoBase, $id]);
+            }
+
+            // El precio del producto es el de UNA unidad base y sale del
+            // formato de venta predeterminado. Asi un formato cargado con
+            // "% sobre costo" no deja el producto en precio 0, y una caja
+            // de 24 a $26.000 deja el puré en $1.083,33 y no en $26.000.
+            $stV = $bd->prepare('SELECT precio, margen, factor FROM productos_formatos
+                                  WHERE producto_id = ? AND ambito = "venta"
+                               ORDER BY predet DESC, factor ASC, id ASC LIMIT 1');
+            $stV->execute([$id]);
+            if ($fv = $stV->fetch()) {
+                $precioUnidad = precioVentaDe([
+                    'precio' => $fv['precio'] !== null ? (float) $fv['precio'] : null,
+                    'margen' => $fv['margen'] !== null ? (float) $fv['margen'] : null,
+                    'factor' => (float) $fv['factor'],
+                ], $costoBase ?? costoProducto($bd, $id));
+                $factor = (float) $fv['factor'] > 0 ? (float) $fv['factor'] : 1.0;
+                $porUnidad = redondear($precioUnidad / $factor);
+                if ($porUnidad > 0) {
+                    $bd->prepare('UPDATE productos SET precio = ? WHERE id = ?')->execute([$porUnidad, $id]);
+                }
             }
 
             $st = $bd->prepare('SELECT pr.*, pv.`nombre` AS proveedor
@@ -378,6 +833,7 @@ try {
             $motivo = pTxt('referencia', 80) ?: ($tipo === 'entrada' ? 'Entrada manual' : 'Salida manual');
             $provId   = pInt('proveedor_id', 0);
             $documento = pTxt('documento', 40);
+            $formatoId = pInt('formato_id', 0);
 
             if ($id <= 0 || $cant === 0.0) {
                 salida(['ok' => false, 'error' => 'Indica el producto y la cantidad.'], 422);
@@ -392,7 +848,36 @@ try {
                 if (!$pr) {
                     throw new RuntimeException('Producto no encontrado.');
                 }
+                // Los productos de venta libre no llevan control de existencias.
+                if ((int) ($pr['sin_stock'] ?? 0) === 1) {
+                    throw new RuntimeException('Este producto se vende sin stock, no se le pueden registrar movimientos.');
+                }
                 $antes = (float) $pr['stock'];
+
+                // Si se eligio un formato de compra (maple, cajon, bolsa, caja),
+                // la cantidad viene en esa presentacion y se pasa a unidad base.
+                $factor = 1.0;
+                $formato = null;
+                if ($formatoId > 0) {
+                    $stF = $bd->prepare('SELECT * FROM productos_formatos
+                                         WHERE id = ? AND producto_id = ? AND ambito = "compra"');
+                    $stF->execute([$formatoId, $id]);
+                    $formato = $stF->fetch();
+                    if (!$formato) {
+                        $formato = formatoPorNombre($bd, $id, 'compra',
+                            (string) pTxt('formato_unidad', 20),
+                            p('formato_factor') !== null ? pNum('formato_factor') : null);
+                    }
+                    if (!$formato) {
+                        throw new RuntimeException('Ese formato de compra no es del producto.');
+                    }
+                    $f = (float) $formato['factor'];
+                    if ($f > 0) { $factor = $f; }
+                } elseif (p('usar_unidad_compra') !== null && $delta > 0) {
+                    $f = (float) ($pr['factor_compra'] ?? 1);
+                    if ($f > 0) { $factor = $f; }
+                }
+                $delta = redondear($delta * $factor);
                 $ahora = redondear($antes + $delta);
 
                 // Al comprar de un proveedor, se actualiza el costo del producto
@@ -402,6 +887,28 @@ try {
                     $bd->prepare('UPDATE productos SET costo = ? WHERE id = ?')->execute([$costoNuevo, $id]);
                 }
 
+                // El precio del formato de compra define el costo por unidad
+                // base: si el maple de 30 sale $5.000, el huevo queda $166,67.
+                // El precio enviado manda sobre el del formato, asi una compra
+                // a otro precio actualiza el costo sin tocar el catalogo.
+                $precioFmt = null;
+                if ($delta > 0 && $formato !== null) {
+                    if (p('precio_formato') !== null && pNum('precio_formato') > 0) {
+                        $precioFmt = pNum('precio_formato');
+                    } elseif ($formato['precio'] !== null && (float) $formato['precio'] > 0) {
+                        $precioFmt = (float) $formato['precio'];
+                    }
+                }
+                if ($precioFmt !== null && $factor > 0) {
+                    $costoNuevo = redondear($precioFmt / $factor);
+                    $bd->prepare('UPDATE productos SET costo = ? WHERE id = ?')->execute([$costoNuevo, $id]);
+                } elseif ($delta > 0 && p('precio_compra') !== null && pNum('precio_compra') > 0 && $factor > 0) {
+                    $costoNuevo = redondear(pNum('precio_compra') / $factor);
+                    $bd->prepare('UPDATE productos SET costo = ? WHERE id = ?')->execute([$costoNuevo, $id]);
+                }
+
+                $unidadFmt = $formato !== null ? (string) $formato['unidad'] : null;
+                $cantidadFmt = $formato !== null ? abs($cant) : null;
                 $bd->prepare('UPDATE productos SET stock = ? WHERE id = ?')->execute([$ahora, $id]);
                 registrarMovimiento([
                     'tipo' => $delta > 0 ? 'entrada' : 'salida', 'producto_id' => $id,
@@ -409,6 +916,9 @@ try {
                     'stock_anterior' => $antes, 'stock_actual' => $ahora,
                     'referencia' => $motivo, 'usuario' => nombreUsuario(),
                     'proveedor_id' => $provId ?: null, 'documento' => $documento ?: null,
+                    'nota' => $unidadFmt !== null
+                        ? ('Formato: ' . $unidadFmt . ' x ' . rtrim(rtrim(number_format((float) $cantidadFmt, 4, '.', ''), '0'), '.'))
+                        : null,
                 ]);
                 $bd->commit();
             } catch (Throwable $e) {
@@ -524,17 +1034,68 @@ try {
            VENTAS
            ============================================================ */
         case 'venta_crear': {
+            // Sin caja abierta no se cobra: así cada venta pertenece a un
+            // turno y el cierre se puede conciliar.
+            $caja = cajaAbierta();
+            if (!$caja) {
+                salida([
+                    'ok'    => false,
+                    'error' => 'Primero abrí tu caja. Sin caja abierta no se puede cobrar.',
+                    'caja'  => true,
+                ], 409);
+            }
+
             $items = p('items', []);
             if (!is_array($items) || count($items) === 0) {
                 salida(['ok' => false, 'error' => 'El carrito está vacío.'], 422);
             }
             $descuento = max(0, pNum('descuento'));
+            $metodoId  = pInt('medio_pago_id');
             $metodo    = pTxt('metodo', 20) ?: 'Efectivo';
             $recibido  = pNum('recibido', -1);
             $vuelto    = pNum('vuelto', 0);
             $ref       = pTxt('referencia', 60);
             $nota      = pTxt('nota', 200);
             $usuario   = nombreUsuario();
+            $datosComanda = p('comanda');
+
+            // El costo del reparto se resuelve de la zona configurada antes de
+            // sumar el total: si mandan otra cifra por el cliente, se ignora.
+            $envio = 0.0;
+            if (is_array($datosComanda) && ($datosComanda['tipo'] ?? '') === 'delivery') {
+                $zonaId = entero($datosComanda['zona_id'] ?? 0);
+                if ($zonaId > 0) {
+                    $stZ = $bd->prepare('SELECT costo FROM zonas WHERE id = ? AND activo = 1');
+                    $stZ->execute([$zonaId]);
+                    $costoZona = $stZ->fetchColumn();
+                    if ($costoZona === false) {
+                        throw new RuntimeException('La zona elegida ya no existe.');
+                    }
+                    $envio = redondear((float) $costoZona);
+                }
+            }
+
+            // El medio de pago se resuelve por id contra la tabla, para que el
+            // cierre pueda agrupar por método. El nombre es sólo respaldo.
+            $mp = null;
+            if ($metodoId > 0) {
+                $st = $bd->prepare('SELECT * FROM `medios_pago` WHERE id = ? AND activo = 1');
+                $st->execute([$metodoId]);
+                $mp = $st->fetch();
+            }
+            if (!$mp) {
+                $st = $bd->prepare('SELECT * FROM `medios_pago` WHERE nombre = ? AND activo = 1');
+                $st->execute([$metodo]);
+                $mp = $st->fetch();
+            }
+            if (!$mp) {
+                throw new RuntimeException('Elegí un medio de pago de la lista.');
+            }
+            $metodo   = (string) $mp['nombre'];
+            $metodoId = (int) $mp['id'];
+            if ((int) $mp['exige_referencia'] === 1 && $ref === '') {
+                throw new RuntimeException('Anotá la referencia de ' . $metodo . ' para poder conciliar la caja.');
+            }
 
             $bd->beginTransaction();
             try {
@@ -553,13 +1114,51 @@ try {
                     if (!$pr) {
                         throw new RuntimeException('Un producto del carrito ya no existe (id ' . $pid . ').');
                     }
-                    $precio = redondear($it['precio'] ?? $pr['precio']);
+
+                    // Con formato de venta (docena, 2x1, maple...): la cantidad
+                    // viene en esas unidades y el precio es el del formato.
+                    $formato = null;
+                    $factor  = 1.0;
+                    $fmtId   = entero($it['formato_id'] ?? 0);
+                    if ($fmtId > 0) {
+                        $stF = $bd->prepare('SELECT * FROM productos_formatos
+                                             WHERE id = ? AND producto_id = ? AND ambito = "venta"');
+                        $stF->execute([$fmtId, $pid]);
+                        $formato = $stF->fetch();
+                        if (!$formato) {
+                            // El formato pudo cambiar de id si el producto se
+                            // guardo entre la carga y el cobro: se busca por
+                            // nombre y cantidad antes de fallar.
+                            $formato = formatoPorNombre($bd, $pid, 'venta',
+                                (string) ($it['formato_unidad'] ?? ''),
+                                isset($it['formato_factor']) ? (float) $it['formato_factor'] : null);
+                        }
+                        if (!$formato) {
+                            throw new RuntimeException('Un formato del carrito no es del producto ' . $pr['nombre'] . '.');
+                        }
+                        $factor = (float) $formato['factor'] > 0 ? (float) $formato['factor'] : 1.0;
+                    }
+
+                    $baseCant = redondear($cant * $factor);
+                    // El precio sale del formato o del producto, nunca del
+                    // navegador: si no hay nada configurado se cae al precio
+                    // que envio el cliente para no dejar la linea en cero.
+                    $precio = $formato !== null
+                        ? precioVentaDe($formato, (float) ($pr['costo'] ?? 0), (float) ($pr['precio'] ?? 0))
+                        : (float) $pr['precio'];
+                    if ($precio <= 0.0 && isset($it['precio']) && is_numeric($it['precio'])) {
+                        $precio = (float) $it['precio'];
+                    }
+                    $precio = redondear($precio);
                     if ($precio < 0) {
                         $precio = 0.0;
                     }
                     $importe = redondear($precio * $cant);
                     $subtotal = redondear($subtotal + $importe);
-                    $lineas[] = ['p' => $pr, 'cant' => $cant, 'precio' => $precio, 'importe' => $importe];
+                    $lineas[] = [
+                        'p' => $pr, 'cant' => $baseCant, 'precio' => $precio,
+                        'importe' => $importe, 'formato' => $formato, 'cant_fmt' => $cant,
+                    ];
                 }
                 if (!$lineas) {
                     throw new RuntimeException('No hay líneas válidas en el carrito.');
@@ -567,7 +1166,7 @@ try {
                 if ($descuento > $subtotal) {
                     $descuento = $subtotal;
                 }
-                $total = redondear($subtotal - $descuento);
+                $total = redondear($subtotal - $descuento + $envio);
 
                 // 2. Folio
                 $st = $bd->query('SELECT COALESCE(MAX(folio),0) FROM ventas');
@@ -578,41 +1177,88 @@ try {
 
                 // 3. Cabecera
                 $st = $bd->prepare(
-                    'INSERT INTO ventas (folio,fecha,subtotal,descuento,total,metodo,recibido,vuelto,referencia,nota,usuario)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+                    'INSERT INTO ventas (folio,fecha,subtotal,descuento,total,envio,metodo,medio_pago_id,recibido,vuelto,referencia,nota,usuario,caja_id)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                 );
                 $st->execute([
-                    $folio, date('Y-m-d H:i:s'), $subtotal, $descuento, $total, $metodo,
+                    $folio, date('Y-m-d H:i:s'), $subtotal, $descuento, $total, $envio, $metodo, $metodoId,
                     $recibido >= 0 ? $recibido : null, $recibido >= 0 ? $vuelto : null,
-                    $ref ?: null, $nota ?: null, $usuario,
+                    $ref ?: null, $nota ?: null, $usuario, (int) $caja['id'],
                 ]);
                 $ventaId = (int) $bd->lastInsertId();
 
                 // 4. Items + descuento de existencias + kardex
                 $stItem = $bd->prepare(
-                    'INSERT INTO venta_items (venta_id,producto_id,nombre,codigo,precio,cantidad,importe,costo_unitario)
-                     VALUES (?,?,?,?,?,?,?,?)'
+                    'INSERT INTO venta_items (venta_id,producto_id,nombre,codigo,precio,cantidad,importe,costo_unitario,
+                                               formato_id,formato_unidad,formato_cantidad)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?)'
                 );
-                $stUpd  = $bd->prepare('UPDATE productos SET stock = ? WHERE id = ?');
                 $sinStock = [];
                 $costoVendido = 0.0;
+                $descuenta = [];   // producto_id => [stock antes, unidades a descontar]
                 foreach ($lineas as $l) {
-                    $pr   = $l['p'];
-                    $antes = (float) $pr['stock'];
-                    $ahora = redondear($antes - $l['cant']);
-                    if ($ahora < 0) {
-                        $sinStock[] = $pr['nombre'];
-                    }
+                    $pr     = $l['p'];
+                    $pid    = (int) $pr['id'];
                     $costoLinea = redondear((float) ($pr['costo'] ?? 0) * $l['cant']);
                     $costoVendido = redondear($costoVendido + $costoLinea);
-                    $stItem->execute([$ventaId, (int) $pr['id'], $pr['nombre'], $pr['codigo'],
-                                      $l['precio'], $l['cant'], $l['importe'], (float) ($pr['costo'] ?? 0)]);
-                    $stUpd->execute([$ahora, (int) $pr['id']]);
+                    $stItem->execute([$ventaId, $pid, $pr['nombre'], $pr['codigo'],
+                                      $l['precio'], $l['cant'], $l['importe'], (float) ($pr['costo'] ?? 0),
+                                      $l['formato'] !== null ? (int) $l['formato']['id'] : null,
+                                      $l['formato'] !== null ? (string) $l['formato']['unidad'] : null,
+                                      $l['formato'] !== null ? (float) $l['cant_fmt'] : null]);
+                    // El mismo producto puede entrar varias veces con distinto
+                    // formato (1 docena + 6 sueltas): se acumula todo y se
+                    // descuenta una sola vez. Los productos de venta libre
+                    // (sin_stock) no entran: no hay existencias que sacar.
+                    if ((int) ($pr['sin_stock'] ?? 0) === 1) {
+                        continue;
+                    }
+                    if (!isset($descuenta[$pid])) {
+                        $descuenta[$pid] = ['antes' => (float) $pr['stock'], 'resta' => 0.0, 'pr' => $pr];
+                    }
+                    $descuenta[$pid]['resta'] = redondear($descuenta[$pid]['resta'] + $l['cant']);
+                }
+
+                // Descuento de existencias: una actualizacion por producto.
+                $stUpd = $bd->prepare('UPDATE productos SET stock = ? WHERE id = ?');
+                foreach ($descuenta as $pid => $d) {
+                    $ahora = redondear($d['antes'] - $d['resta']);
+                    if ($ahora < 0 && !in_array($d['pr']['nombre'], $sinStock, true)) {
+                        $sinStock[] = $d['pr']['nombre'];
+                    }
+                    $stUpd->execute([$ahora, $pid]);
+                    $descuenta[$pid]['ahora'] = $ahora;
+                }
+
+                // Kardex: una linea por formato, con el stock encadenado.
+                $recorrido = [];
+                foreach ($lineas as $l) {
+                    $pr   = $l['p'];
+                    $pid  = (int) $pr['id'];
+                    // La venta libre no entra en $descuenta porque no descuenta
+                    // stock, asi que tampoco tiene kardex que escribir.
+                    if ((int) ($pr['sin_stock'] ?? 0) === 1) {
+                        continue;
+                    }
+                    $d    = $descuenta[$pid];
+                    $antes = $recorrido[$pid] ?? $d['antes'];
+                    $ahora = redondear($antes - $l['cant']);
+                    $recorrido[$pid] = $ahora;
                     registrarMovimiento([
-                        'tipo' => 'venta', 'producto_id' => (int) $pr['id'], 'producto_nombre' => $pr['nombre'],
+                        'tipo' => 'venta', 'producto_id' => $pid, 'producto_nombre' => $pr['nombre'],
                         'cantidad' => -$l['cant'], 'stock_anterior' => $antes, 'stock_actual' => $ahora,
                         'referencia' => 'Venta folio ' . $folio, 'usuario' => $usuario,
+                        'nota' => $l['formato'] !== null
+                            ? ((string) $l['formato']['unidad'] . ' x ' . rtrim(rtrim(number_format((float) $l['cant_fmt'], 4, '.', ''), '0'), '.'))
+                            : null,
                     ]);
+                }
+
+                // La comanda se guarda en la MISMA transaccion que la venta:
+                // o queda el pedido pagado y su comanda, o no queda nada.
+                $comandaId = null;
+                if (is_array($datosComanda)) {
+                    $comandaId = guardarComanda($bd, $datosComanda, $ventaId, $folio, $total, $usuario, $envio);
                 }
 
                 $bd->commit();
@@ -626,15 +1272,9 @@ try {
             $v = venta($st->fetch());
             $v['costo']    = $costoVendido;
             $v['utilidad'] = redondear($total - $costoVendido);
-            $st = $bd->prepare('SELECT * FROM venta_items WHERE venta_id = ? ORDER BY id');
-            $st->execute([$ventaId]);
-            $v['items'] = array_map(fn($i) => [
-                'nombre' => $i['nombre'], 'codigo' => $i['codigo'] ?? '',
-                'precio' => (float) $i['precio'], 'cantidad' => (float) $i['cantidad'],
-                'importe' => (float) $i['importe'],
-            ], $st->fetchAll());
+            $v['items'] = itemsDe($bd, $ventaId);
 
-            salida(['ok' => true, 'venta' => $v, 'sin_stock' => $sinStock]);
+            salida(['ok' => true, 'venta' => $v, 'sin_stock' => $sinStock, 'comanda_id' => $comandaId]);
         }
 
         case 'venta_anular': {
@@ -652,6 +1292,13 @@ try {
                 if ((int) $v['anulada'] === 1) {
                     throw new RuntimeException('Esa venta ya estaba anulada.');
                 }
+                // El vendedor sólo anula lo que está en su caja abierta.
+                // Con la caja ya cerrada, sólo el administrador.
+                if (!puedeAnularVenta($v)) {
+                    throw new RuntimeException(
+                        'Con la caja cerrada sólo el administrador puede anular esta venta.'
+                    );
+                }
                 $st = $bd->prepare('SELECT * FROM venta_items WHERE venta_id = ?');
                 $st->execute([$id]);
                 $items = $st->fetchAll();
@@ -662,10 +1309,15 @@ try {
                         continue;
                     }
                     $pid = (int) $it['producto_id'];
-                    $s = $bd->prepare('SELECT stock FROM productos WHERE id = ? FOR UPDATE');
+                    $s = $bd->prepare('SELECT stock, sin_stock FROM productos WHERE id = ? FOR UPDATE');
                     $s->execute([$pid]);
                     $fila = $s->fetch();
                     if (!$fila) {
+                        continue;
+                    }
+                    // La venta libre nunca toca el stock: al anular tampoco
+                    // hay que reponer.
+                    if ((int) ($fila['sin_stock'] ?? 0) === 1) {
                         continue;
                     }
                     $antes = (float) $fila['stock'];
@@ -677,8 +1329,8 @@ try {
                         'referencia' => 'Anulación venta folio ' . (int) $v['folio'], 'usuario' => nombreUsuario(),
                     ]);
                 }
-                $bd->prepare('UPDATE ventas SET anulada=1, anulada_en=NOW(), motivo=? WHERE id=?')
-                   ->execute([$motivo, $id]);
+                $bd->prepare('UPDATE ventas SET anulada=1, anulada_en=NOW(), motivo=?, anulada_por=? WHERE id=?')
+                   ->execute([$motivo, nombreUsuario(), $id]);
                 $bd->commit();
             } catch (Throwable $e) {
                 $bd->rollBack();
@@ -732,14 +1384,8 @@ try {
             if (!$v) {
                 salida(['ok' => false, 'error' => 'La venta no existe.'], 404);
             }
-            $st = $bd->prepare('SELECT * FROM venta_items WHERE venta_id = ? ORDER BY id');
-            $st->execute([$id]);
             $v = venta($v);
-            $v['items'] = array_map(fn($i) => [
-                'nombre' => $i['nombre'], 'codigo' => $i['codigo'] ?? '',
-                'precio' => (float) $i['precio'], 'cantidad' => (float) $i['cantidad'],
-                'importe' => (float) $i['importe'],
-            ], $st->fetchAll());
+            $v['items'] = itemsDe($bd, $id);
             salida(['ok' => true, 'venta' => $v]);
         }
 
@@ -802,9 +1448,11 @@ try {
             $st->execute([$d, $h]);
             $porPago = array_map(fn($r) => ['metodo' => $r['metodo'], 'ventas' => (int) $r['n'], 'total' => (float) $r['t']], $st->fetchAll());
 
+            // "Quedan pocas" y la valuacion de inventario excluyen los
+            // productos de venta libre: no llevan control de existencias.
             $st = $bd->query('SELECT id, nombre, stock, minimo, unidad, precio
                              FROM productos
-                             WHERE activo = 1 AND stock <= GREATEST(minimo, 0)
+                             WHERE activo = 1 AND sin_stock = 0 AND stock <= GREATEST(minimo, 0)
                              ORDER BY (stock - GREATEST(minimo,0)) ASC, nombre ASC LIMIT 30');
             $faltantes = array_map(fn($r) => [
                 'id' => (int) $r['id'], 'nombre' => $r['nombre'],
@@ -814,7 +1462,7 @@ try {
 
             $st = $bd->query('SELECT COALESCE(SUM(stock*precio),0) AS v, COALESCE(SUM(stock*minimo),0) AS m,
                                      COALESCE(SUM(stock*costo),0) AS c, COALESCE(SUM(stock),0) AS u
-                             FROM productos WHERE activo = 1');
+                             FROM productos WHERE activo = 1 AND sin_stock = 0');
             $inv = $st->fetch();
             $costoInv = (float) $inv['c'];
             $ventaInv = (float) $inv['v'];
@@ -846,7 +1494,12 @@ try {
 
         case 'kardex': {
             $id = pInt('id');
-            $st = $bd->prepare('SELECT * FROM movimientos WHERE producto_id = ? ORDER BY id DESC LIMIT 100');
+            $st = $bd->prepare(
+                'SELECT m.*, pr.unidad
+                 FROM movimientos m
+                 LEFT JOIN productos pr ON pr.id = m.producto_id
+                 WHERE m.producto_id = ? ORDER BY m.id DESC LIMIT 100'
+            );
             $st->execute([$id]);
             salida(['ok' => true, 'movimientos' => $st->fetchAll()]);
         }
@@ -909,6 +1562,502 @@ try {
                 throw $e;
             }
             salida(['ok' => true, 'respaldo' => $respaldo]);
+        }
+
+        /* ============================================================
+           SESIÓN, CAJAS Y USUARIOS
+           ============================================================ */
+
+        /* ---------- ¿Quién está entrado y con qué caja? ---------- */
+        case 'sesion_info': {
+        $u = usuarioActual();
+        salida([
+            'ok'      => true,
+            'usuario' => $u ? [
+                'id'                 => (int) $u['id'],
+                'usuario'            => $u['usuario'],
+                'nombre'             => $u['nombre'],
+                'rol'                => $u['rol'],
+                'es_admin'           => $u['rol'] === 'admin',
+                'debe_cambiar_clave' => (int) $u['debe_cambiar_clave'] === 1,
+            ] : null,
+            'caja'    => cajaAbierta() ? cajaResumen(cajaAbierta()) : null,
+        ]);
+    }
+
+    /* ---------- Abrir caja ---------- */
+    case 'caja_abrir': {
+        $u = usuarioActual();
+        if (cajaDeUsuario((int) $u['id'])) {
+            throw new RuntimeException('Ya tenés una caja abierta. Cierrala antes de abrir otra.');
+        }
+        $monto = max(0, pNum('monto_inicial'));
+        $st = $bd->prepare('INSERT INTO `cajas` (usuario_id, monto_inicial) VALUES (?,?)');
+        $st->execute([(int) $u['id'], $monto]);
+        salida(['ok' => true, 'caja' => cajaResumen(cajaDeUsuario((int) $u['id']))]);
+    }
+
+    /* ---------- Ver mi caja abierta ---------- */
+    case 'cajas_mias': {
+        $u = usuarioActual();
+        salida([
+            'ok'    => true,
+            'caja'  => $caja = cajaDeUsuario((int) $u['id']),
+            'resumen' => $caja ? resumenCaja($bd, (int) $caja['id']) : null,
+        ]);
+    }
+
+        /* ---------- Cerrar caja con conciliación ---------- */
+        case 'caja_cerra': {
+            $u = usuarioActual();
+            $cajaId = pInt('caja_id');
+
+            if ($cajaId > 0) {
+                // Cerrar una caja ajena: sólo el administrador puede.
+                $caja = cajaPorId($cajaId);
+                if (!$caja) {
+                    throw new RuntimeException('Esa caja no existe.');
+                }
+                if ((int) $caja['usuario_id'] !== (int) $u['id'] && $u['rol'] !== 'admin') {
+                    salida(['ok' => false, 'error' => 'Esa caja es de otro cajero.'], 403);
+                }
+                if ((int) $caja['abierta'] !== 1) {
+                    throw new RuntimeException('Esa caja ya estaba cerrada.');
+                }
+            } else {
+                $caja = cajaDeUsuario((int) $u['id']);
+                if (!$caja) {
+                    throw new RuntimeException('No tenés ninguna caja abierta.');
+                }
+                $cajaId = (int) $caja['id'];
+            }
+
+        $declarados = p('declarados', []);
+        $declarados = is_array($declarados) ? $declarados : [];
+        $motivo = pTxt('motivo', 200);
+
+        $resumen = resumenCaja($bd, $cajaId);
+        $esperadoEfectivo = efectivoEsperadoCaja($bd, $cajaId);
+
+        $bd->beginTransaction();
+        try {
+            $st = $bd->prepare(
+                'INSERT INTO `caja_cierre_metodos` (caja_id, medio_pago_id, esperado, declarado, diferencia)
+                 VALUES (?,?,?,?,?)'
+            );
+            foreach ($resumen['metodos'] as $m) {
+                if ($m['ventas'] === 0) {
+                    continue;   // sin ventas no hay nada que conciliar
+                }
+                $dec = array_key_exists((string) $m['id'], $declarados)
+                    ? redondear(numero($declarados[(string) $m['id']]))
+                    : $m['esperado'];
+                $st->execute([$cajaId, $m['id'], $m['esperado'], $dec, redondear($dec - $m['esperado'])]);
+            }
+
+            // El efectivo declarado es la gaveta real: incluye el fondo inicial.
+            // El frontend manda un id por método, no la palabra "efectivo", así que
+            // buscamos cuál de los métodos de la conciliación es el de efectivo.
+            $idEfectivo = 0;
+            foreach ($resumen['metodos'] as $m) {
+                if ($m['es_efectivo']) { $idEfectivo = $m['id']; break; }
+            }
+            $decEfectivo = $idEfectivo && array_key_exists((string) $idEfectivo, $declarados)
+                ? redondear(numero($declarados[(string) $idEfectivo]))
+                : $esperadoEfectivo;
+            $difEfectivo = redondear($decEfectivo - $esperadoEfectivo);
+
+            if (abs($difEfectivo) > 0.009 && $motivo === '') {
+                throw new RuntimeException(
+                    'El efectivo no cuadra (faltan o sobran ' . monto(abs($difEfectivo)) . '). ' .
+                    'Contá bien y, si el descuadre es real, escribí el motivo antes de cerrar.'
+                );
+            }
+
+            $st = $bd->prepare(
+                'UPDATE `cajas` SET cerrada_en = NOW(), abierta = 0,
+                        efectivo_esperado = ?, efectivo_declarado = ?,
+                        total_esperado = ?, total_declarado = ?, diferencia = ?, motivo = ?
+                 WHERE id = ?'
+            );
+            $st->execute([
+                $esperadoEfectivo, $decEfectivo,
+                $resumen['esperado'], $resumen['declarado'],
+                $difEfectivo, $motivo ?: null, $cajaId,
+            ]);
+            $bd->commit();
+        } catch (Throwable $e) {
+            $bd->rollBack();
+            throw $e;
+        }
+
+        salida([
+            'ok'      => true,
+            'caja'    => cajaResumen(cajaPorId($cajaId)),
+            'resumen' => $resumen,
+        ]);
+    }
+
+        /* ---------- Historial de cajas ----------
+           El administrador ve todas; el vendedor, sólo las suyas. */
+        case 'cajas_todas': {
+            $desde = pTxt('desde', 10) ?: date('Y-m-01');
+            $hasta = pTxt('hasta', 10) ?: date('Y-m-d');
+            $u     = usuarioActual();
+
+            $sql = 'SELECT c.*, us.nombre AS cajero, us.usuario AS cajero_usuario,
+                           (SELECT COUNT(*) FROM `ventas` v WHERE v.caja_id = c.id AND v.anulada = 0) AS ventas
+                    FROM `cajas` c
+                    JOIN `usuarios` us ON us.id = c.usuario_id
+                    WHERE DATE(c.abierta_en) BETWEEN ? AND ?';
+            $par = [$desde, $hasta];
+            if ($u['rol'] !== 'admin') {
+                $sql .= ' AND c.usuario_id = ?';
+                $par[] = (int) $u['id'];
+            }
+            $sql .= ' ORDER BY c.id DESC';
+
+            $st = $bd->prepare($sql);
+            $st->execute($par);
+            $cajas = array_map(fn($c) => cajaResumen($c), $st->fetchAll());
+
+            $desc = 0;
+            foreach ($cajas as $c) {
+                if (!$c['abierta'] && $c['diferencia'] !== null && abs($c['diferencia']) > 0.009) {
+                    $desc++;
+                }
+            }
+            salida([
+                'ok' => true, 'cajas' => $cajas,
+                'desde' => $desde, 'hasta' => $hasta, 'descuadres' => $desc,
+                'solo_mias' => $u['rol'] !== 'admin',
+            ]);
+        }
+
+    /* ---------- Detalle de una caja ---------- */
+    case 'caja_detalle': {
+        $id = pInt('id');
+        $u = usuarioActual();
+        $st = $bd->prepare(
+            'SELECT c.*, us.nombre AS cajero, us.usuario AS cajero_usuario
+             FROM `cajas` c JOIN `usuarios` us ON us.id = c.usuario_id WHERE c.id = ?'
+        );
+        $st->execute([$id]);
+        $c = $st->fetch();
+        if (!$c) {
+            salida(['ok' => false, 'error' => 'La caja no existe.'], 404);
+        }
+        // El vendedor sólo puede mirar sus propias cajas.
+        if ($u['rol'] !== 'admin' && (int) $c['usuario_id'] !== (int) $u['id']) {
+            salida(['ok' => false, 'error' => 'Esa caja es de otro cajero.'], 403);
+        }
+
+        $st = $bd->prepare(
+            'SELECT id, folio, fecha, total, metodo, medio_pago_id, recibido, vuelto, referencia, anulada
+             FROM `ventas` WHERE caja_id = ? ORDER BY id'
+        );
+        $st->execute([$id]);
+        $ventas = array_map(fn($v) => [
+            'id'       => (int) $v['id'],
+            'folio'    => (int) $v['folio'],
+            'fecha'    => $v['fecha'],
+            'total'    => (float) $v['total'],
+            'metodo'   => $v['metodo'],
+            'recibido' => $v['recibido'] === null ? null : (float) $v['recibido'],
+            'vuelto'   => $v['vuelto'] === null ? null : (float) $v['vuelto'],
+            'referencia'=> $v['referencia'] ?? '',
+            'anulada'  => (int) $v['anulada'] === 1,
+        ], $st->fetchAll());
+
+        salida([
+            'ok'      => true,
+            'caja'    => cajaResumen($c),
+            'resumen' => resumenCaja($bd, $id),
+            'ventas'  => $ventas,
+        ]);
+    }
+
+    /* ---------- Usuarios (administrador) ---------- */
+    case 'usuarios': {
+        $st = $bd->query(
+            'SELECT us.id, us.usuario, us.nombre, us.rol, us.activo, us.creado, us.ultimo_ingreso,
+                    (SELECT COUNT(*) FROM `cajas` c WHERE c.usuario_id = us.id) AS cajas
+             FROM `usuarios` us ORDER BY us.rol, us.nombre'
+        );
+        salida(['ok' => true, 'usuarios' => $st->fetchAll()]);
+    }
+
+    case 'comandas': {
+        // Tablero de cocina. Por defecto sólo lo que está en curso; el
+        // histórico se pide con ?incluir=cerradas.
+        $estados = ['pendiente', 'preparando', 'listo'];
+        if (pTxt('incluir') === 'cerradas') {
+            $estados = ESTADOS_COMANDA;
+        }
+        $lugares = array_map('trim', explode(',', pTxt('estados', 60)));
+        $lugares = array_values(array_filter($lugares, fn($e) => in_array($e, ESTADOS_COMANDA, true)));
+        if (!$lugares) {
+            $lugares = $estados;
+        }
+        $in = implode(',', array_fill(0, count($lugares), '?'));
+        $st = $bd->prepare("SELECT * FROM comandas WHERE estado IN ($in) ORDER BY id DESC LIMIT 200");
+        $st->execute($lugares);
+        $salida = ['ok' => true, 'comandas' => []];
+        foreach ($st->fetchAll() as $fila) {
+            $c = comandaCompleta($bd, (int) $fila['id']);
+            if ($c) {
+                $salida['comandas'][] = $c;
+            }
+        }
+        salida($salida);
+    }
+
+    case 'comanda': {
+        $c = comandaCompleta($bd, pInt('id'));
+        if (!$c) {
+            salida(['ok' => false, 'error' => 'Esa comanda ya no existe.'], 404);
+        }
+        salida(['ok' => true, 'comanda' => $c]);
+    }
+
+    case 'comanda_estado': {
+        $id    = pInt('id');
+        $nuevo = pTxt('estado', 20);
+        if (!in_array($nuevo, ESTADOS_COMANDA, true)) {
+            throw new RuntimeException('Estado de comanda desconocido.');
+        }
+        // Cancelar tira el pedido: lo decide el administrador, no la cocina.
+        if ($nuevo === 'cancelado' && !esAdmin()) {
+            salida(['ok' => false, 'error' => 'Sólo el administrador puede cancelar una comanda.'], 403);
+        }
+        $cerrado = in_array($nuevo, ['entregado', 'cancelado'], true) ? date('Y-m-d H:i:s') : null;
+
+        $st = $bd->prepare('SELECT * FROM comandas WHERE id = ?');
+        $st->execute([$id]);
+        $actual = $st->fetch();
+        if (!$actual) {
+            salida(['ok' => false, 'error' => 'Esa comanda ya no existe.'], 404);
+        }
+        // Una comanda cancelada o ya entregada no vuelve atrás: si el pedido
+        // se equivozó se carga uno nuevo.
+        if (in_array((string) $actual['estado'], ['entregado', 'cancelado'], true)
+            && $nuevo !== (string) $actual['estado']) {
+            salida(['ok' => false, 'error' => 'Esa comanda ya está cerrada.'], 409);
+        }
+        $st = $bd->prepare('UPDATE comandas SET estado = ?, actualizado = ?, cerrado_en = ? WHERE id = ?');
+        $st->execute([$nuevo, date('Y-m-d H:i:s'), $cerrado, $id]);
+        salida(['ok' => true, 'comanda' => comandaCompleta($bd, $id)]);
+    }
+
+    case 'comanda_item': {
+        // Cocina tacha linea por linea: "1 miga listo" sin esperar al resto.
+        $idItem = pInt('id_item');
+        $nuevo  = pTxt('estado', 20) === 'listo' ? 'listo' : 'pendiente';
+        $st = $bd->prepare('UPDATE comanda_items SET estado = ? WHERE id = ?');
+        $st->execute([$nuevo, $idItem]);
+        if ($st->rowCount() === 0) {
+            salida(['ok' => false, 'error' => 'Esa línea ya no existe.'], 404);
+        }
+        $st = $bd->prepare('SELECT comanda_id FROM comanda_items WHERE id = ?');
+        $st->execute([$idItem]);
+        $cid = (int) $st->fetchColumn();
+        $st = $bd->prepare('UPDATE comandas SET actualizado = ? WHERE id = ?');
+        $st->execute([date('Y-m-d H:i:s'), $cid]);
+        salida(['ok' => true, 'comanda' => comandaCompleta($bd, $cid)]);
+    }
+
+    case 'comanda_atajos': {
+        $st = $bd->query('SELECT * FROM comanda_atajos WHERE activo = 1 ORDER BY seccion, orden, id');
+        $salida = ['ok' => true, 'atajos' => []];
+        foreach ($st->fetchAll() as $a) {
+            $salida['atajos'][] = [
+                'id' => (int) $a['id'], 'seccion' => $a['seccion'], 'etiqueta' => $a['etiqueta'],
+                'producto_id' => $a['producto_id'] !== null ? (int) $a['producto_id'] : null,
+                'formato_unidad' => $a['formato_unidad'] ?: null,
+                'texto' => $a['texto'] ?: null, 'detalle' => $a['detalle'] ?: null,
+                'orden' => (int) $a['orden'],
+            ];
+        }
+        salida($salida);
+    }
+
+    case 'atajo_guardar': {
+        $id   = pInt('id');
+        $etq  = trim(pTxt('etiqueta', 60));
+        if ($etq === '') {
+            throw new RuntimeException('La etiqueta del atajo no puede estar vacía.');
+        }
+        $texto = trim(pTxt('texto', 160));
+        $pid   = pInt('producto_id');
+        if ($texto === '' && $pid <= 0) {
+            throw new RuntimeException('Elegí un producto o escribí lo que tiene que preparar cocina.');
+        }
+        $vals = [
+            trim(pTxt('seccion', 40)) ?: 'Comidas', $etq,
+            $pid > 0 ? $pid : null, trim(pTxt('formato_unidad', 20)) ?: null,
+            $texto ?: null, trim(pTxt('detalle', 160)) ?: null,
+            pInt('orden'), p('activo', 1) ? 1 : 0,
+        ];
+        if ($id > 0) {
+            $st = $bd->prepare('UPDATE comanda_atajos
+                SET seccion=?, etiqueta=?, producto_id=?, formato_unidad=?, texto=?, detalle=?, orden=?, activo=?
+                WHERE id=?');
+            $st->execute([...$vals, $id]);
+        } else {
+            $st = $bd->prepare('INSERT INTO comanda_atajos
+                (seccion,etiqueta,producto_id,formato_unidad,texto,detalle,orden,activo) VALUES (?,?,?,?,?,?,?,?)');
+            $st->execute($vals);
+        }
+        salida(['ok' => true, 'id' => $id > 0 ? $id : (int) $bd->lastInsertId()]);
+    }
+
+    case 'atajo_borrar': {
+        $st = $bd->prepare('DELETE FROM comanda_atajos WHERE id = ?');
+        $st->execute([pInt('id')]);
+        salida(['ok' => true]);
+    }
+
+    case 'zonas': {
+        $st = $bd->query('SELECT * FROM zonas WHERE activo = 1 ORDER BY orden, id');
+        salida(['ok' => true, 'zonas' => array_map(fn($z) => [
+            'id' => (int) $z['id'], 'nombre' => $z['nombre'], 'costo' => (float) $z['costo'],
+        ], $st->fetchAll())]);
+    }
+
+    case 'zona_guardar': {
+        $nombre = trim(pTxt('nombre', 60));
+        if ($nombre === '') {
+            throw new RuntimeException('La zona necesita un nombre.');
+        }
+        $id = pInt('id');
+        if ($id > 0) {
+            $st = $bd->prepare('UPDATE zonas SET nombre=?, costo=?, activo=? WHERE id=?');
+            $st->execute([$nombre, pNum('costo'), p('activo', 1) ? 1 : 0, $id]);
+        } else {
+            $st = $bd->prepare('INSERT INTO zonas (nombre,costo,orden,activo) VALUES (?,?,?,?)');
+            $st->execute([$nombre, pNum('costo'), pInt('orden'), p('activo', 1) ? 1 : 0]);
+            $id = (int) $bd->lastInsertId();
+        }
+        salida(['ok' => true, 'id' => $id]);
+    }
+
+    case 'zona_borrar': {
+        $st = $bd->prepare('DELETE FROM zonas WHERE id = ?');
+        $st->execute([pInt('id')]);
+        salida(['ok' => true]);
+    }
+
+    case 'usuario_guardar': {
+        $id   = pInt('id');
+        $user = strtolower(trim(pTxt('usuario', 40)));
+        $nombre = trim(pTxt('nombre', 80));
+        $rol  = pTxt('rol', 10);
+        if (!in_array($rol, ['admin', 'vendedor', 'cocina'], true)) {
+            $rol = 'vendedor';
+        }
+        $clave = (string) p('clave', '');
+        $activo = p('activo', 1) ? 1 : 0;
+
+        if ($user === '' || !preg_match('/^[a-z0-9._-]{3,40}$/', $user)) {
+            throw new RuntimeException('El usuario debe tener de 3 a 40 caracteres: letras, números, punto, guion o guion bajo.');
+        }
+        if ($nombre === '') {
+            throw new RuntimeException('Escribí el nombre de la persona.');
+        }
+
+        if ($id > 0) {
+            $st = $bd->prepare('SELECT * FROM `usuarios` WHERE id = ?');
+            $st->execute([$id]);
+            $existente = $st->fetch();
+            if (!$existente) {
+                throw new RuntimeException('Ese usuario ya no existe.');
+            }
+            // No dejar el kiosco sin ningún administrador activo.
+            if ($existente['rol'] === 'admin' && ($rol !== 'admin' || !$activo)) {
+                $otros = (int) $bd->query("SELECT COUNT(*) FROM `usuarios` WHERE rol='admin' AND activo=1 AND id <> " . $id)->fetchColumn();
+                if ($otros === 0) {
+                    throw new RuntimeException('Tiene que quedar al menos un administrador activo.');
+                }
+            }
+            if (cajaDeUsuario($id) && $rol !== 'admin') {
+                // sin consecuencia real, pero evita confusiones de permisos
+                $rol = 'vendedor';
+            }
+            $st = $bd->prepare('UPDATE `usuarios` SET usuario=?, nombre=?, rol=?, activo=? WHERE id=?');
+            $st->execute([$user, $nombre, $rol, $activo, $id]);
+            if ($clave !== '') {
+                if (strlen($clave) < 4) {
+                    throw new RuntimeException('La clave debe tener al menos 4 caracteres.');
+                }
+                $bd->prepare('UPDATE `usuarios` SET clave=?, debe_cambiar_clave=1 WHERE id=?')
+                   ->execute([password_hash($clave, PASSWORD_DEFAULT), $id]);
+            }
+            salida(['ok' => true, 'id' => $id, 'clave_renovada' => $clave !== '']);
+        }
+
+        if ($clave === '' || strlen($clave) < 4) {
+            throw new RuntimeException('Asigná una clave de al menos 4 caracteres.');
+        }
+        $st = $bd->prepare('SELECT COUNT(*) FROM `usuarios` WHERE usuario = ?');
+        $st->execute([$user]);
+        if ((int) $st->fetchColumn() > 0) {
+            throw new RuntimeException('Ya existe un usuario con ese nombre.');
+        }
+        $st = $bd->prepare(
+            'INSERT INTO `usuarios` (usuario, nombre, clave, rol, activo, debe_cambiar_clave) VALUES (?,?,?,?,1,1)'
+        );
+        $st->execute([$user, $nombre, password_hash($clave, PASSWORD_DEFAULT), $rol]);
+        salida(['ok' => true, 'id' => (int) $bd->lastInsertId()]);
+    }
+
+    case 'usuario_borrar': {
+        $id = pInt('id');
+        $u  = usuarioActual();
+        if ($id === (int) $u['id']) {
+            throw new RuntimeException('No te podés borrar a vos mismo.');
+        }
+        $st = $bd->prepare('SELECT * FROM `usuarios` WHERE id = ?');
+        $st->execute([$id]);
+        $usr = $st->fetch();
+        if (!$usr) {
+            throw new RuntimeException('Ese usuario no existe.');
+        }
+        if ($usr['rol'] === 'admin') {
+            $otros = (int) $bd->query("SELECT COUNT(*) FROM `usuarios` WHERE rol='admin' AND activo=1 AND id <> " . $id)->fetchColumn();
+            if ($otros === 0) {
+                throw new RuntimeException('Tiene que quedar al menos un administrador activo.');
+            }
+        }
+        if (cajaDeUsuario($id)) {
+            throw new RuntimeException('Ese usuario tiene una caja abierta. Pedile que la cierre antes.');
+        }
+        // No se borra físicamente: el historial de ventas y cajas lo referencia.
+        $bd->prepare('UPDATE `usuarios` SET activo = 0 WHERE id = ?')->execute([$id]);
+        salida(['ok' => true, 'desactivado' => true]);
+    }
+
+    /* ---------- Cambiar mi propia clave ---------- */
+    case 'clave_cambiar': {
+        $u = usuarioActual();
+        if (!$u) {
+            salida(['ok' => false, 'error' => 'Sesión vencida.'], 401);
+        }
+        $actual  = (string) p('actual', '');
+        $nueva   = (string) p('nueva', '');
+        $repetir = (string) p('repetir', '');
+
+        if (!password_verify($actual, (string) $u['clave'])) {
+            throw new RuntimeException('La clave actual no es correcta.');
+        }
+        if (strlen($nueva) < 4) {
+            throw new RuntimeException('La clave nueva debe tener al menos 4 caracteres.');
+        }
+        if ($nueva !== $repetir) {
+            throw new RuntimeException('Las dos claves nuevas no coinciden.');
+        }
+        $bd->prepare('UPDATE `usuarios` SET clave = ?, debe_cambiar_clave = 0 WHERE id = ?')
+           ->execute([password_hash($nueva, PASSWORD_DEFAULT), (int) $u['id']]);
+        salida(['ok' => true]);
         }
 
         default:

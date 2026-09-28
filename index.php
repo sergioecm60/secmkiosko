@@ -3,13 +3,30 @@
  * Kiosco — interfaz del punto de venta.
  */
 declare(strict_types=1);
-require __DIR__ . '/config.php';
+require __DIR__ . '/sesion.php';
 
 if (!instalado()) {
     header('Location: instalar.php');
     exit;
 }
+
+// Sin sesión no se entra al punto de venta.
+$yo = usuarioActual();
+if (!$yo) {
+    header('Location: login.php');
+    exit;
+}
+// Con la clave de fábrica todavía no se opera: primero hay que cambiarla.
+if ((int) $yo['debe_cambiar_clave'] === 1) {
+    header('Location: login.php');
+    exit;
+}
+
 $cfg = leerConfig();
+$soyAdmin = ($yo['rol'] === 'admin');
+$soyCocina = ($yo['rol'] === 'cocina');
+$miRol = $yo['rol'] ?: 'vendedor';
+$rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => 'Cocina'][$miRol] ?? 'Vendedor';
 ?><!DOCTYPE html>
 <html lang="es-MX">
 <head>
@@ -19,7 +36,8 @@ $cfg = leerConfig();
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128722;</text></svg>">
 <link rel="stylesheet" href="estilos.css?v=<?= @filemtime(__DIR__ . '/estilos.css') ?: '1' ?>">
 </head>
-<body class="<?= ($cfg['tema'] ?? 'claro') === 'ocuro' ? 'ocuro' : '' ?>">
+<body class="<?= ($cfg['tema'] ?? 'claro') === 'ocuro' ? 'ocuro' : '' ?>"
+      data-rol="<?= htmlspecialchars($miRol, ENT_QUOTES, 'UTF-8') ?>">
 
 <header class="topbar">
   <div class="brand">
@@ -33,7 +51,9 @@ $cfg = leerConfig();
     <button data-v="vender" class="on">Vender</button>
     <button data-v="productos">Productos</button>
     <button data-v="historial">Historial</button>
+    <button data-v="cajas"><?= $soyAdmin ? 'Cajas' : 'Mi caja' ?></button>
     <button data-v="reportes">Reportes</button>
+    <button data-v="cocina" class="tab-cocina">🍳 Cocina <span class="pill" id="coc-pend" hidden>0</span></button>
     <button data-v="ajustes">Ajustes</button>
   </nav>
   <div class="caja-dia">
@@ -41,7 +61,37 @@ $cfg = leerConfig();
     <div class="val" id="lbl-hoy-total">$0.00</div>
   </div>
   <button class="icono" id="btn-tema" title="Cambiar tema claro / oscuro">🌗</button>
+  <div class="sesion-caja" id="mi-caja" title="Estado de tu caja">
+    <span class="pt">Mi caja</span>
+    <span class="pv" id="mi-caja-val">—</span>
+  </div>
+  <div class="menu-usuario">
+    <button class="usuario-btn" id="btn-usuario" title="Tu cuenta">
+      <span class="avatar" id="lbl-avatar"><?= htmlspecialchars(mb_strtoupper(mb_substr($yo['nombre'], 0, 1)), ENT_QUOTES, 'UTF-8') ?></span>
+      <span class="udatos">
+        <span class="unombre" id="lbl-usuario"><?= htmlspecialchars($yo['nombre'], ENT_QUOTES, 'UTF-8') ?></span>
+        <span class="urole"><?= htmlspecialchars($rolTexto, ENT_QUOTES, 'UTF-8') ?></span>
+      </span>
+      <span class="flecha">▾</span>
+    </button>
+    <div class="menu-lista" id="menu-usuario-lista">
+      <button data-ir="cajas">🏧 <span>Mi caja</span></button>
+      <?php if ($soyAdmin): ?>
+      <button data-ir="usuarios">👥 <span>Usuarios</span></button>
+      <?php endif; ?>
+      <button data-accion="clave">🔑 <span>Cambiar mi clave</span></button>
+      <div class="menu-sep"></div>
+      <a href="salir.php" class="peligro">🚪 <span>Cerrar sesión</span></a>
+    </div>
+  </div>
 </header>
+
+<?php if (!$soyAdmin): ?>
+<div class="aviso-rol">
+  Estás como <b>Vendedor</b>: podés abrir y cerrar tu caja y vender.
+  Los productos, precios y el stock los carga el administrador.
+</div>
+<?php endif; ?>
 
 <main>
   <!-- ================= VENDER ================= -->
@@ -53,13 +103,20 @@ $cfg = leerConfig();
           <input id="txt-buscar" placeholder="Escanea el código o escribe el nombre del producto…" autocomplete="off" spellcheck="false">
           <button class="x" id="btn-limpiar-busca" title="Limpiar búsqueda (Esc)">✕</button>
         </div>
+        <div class="barra-rapida">
+          <button class="btn sm" id="btn-rapido" title="Cargar al vuelo algo que no está en el catálogo. Se cobra con su precio y no descuenta stock.">＋ Producto rápido</button>
+          <span class="fuente">Venta espontánea: se cobra, no se controla stock</span>
+        </div>
         <div class="chips" id="filtros"></div>
         <div class="grid" id="grid-productos"></div>
       </div>
-      <aside class="pos-der">
+        <aside class="pos-der">
         <div class="carrito-cab">
           <h2>🧾 Ticket <span class="pill" id="c-count">0</span></h2>
-          <button class="mini peligro" id="btn-vaciar">Vaciar</button>
+          <div class="filetools">
+            <button class="mini delivery" id="btn-delivery" title="Comanda para cocina (delivery, retiro o mesa)">🚚 Delivery</button>
+            <button class="mini peligro" id="btn-vaciar">Vaciar</button>
+          </div>
         </div>
         <div class="carrito-items" id="carrito-items"></div>
         <div class="carrito-pie">
@@ -68,7 +125,15 @@ $cfg = leerConfig();
             <span>Descuento <span class="lapiz" title="Cambiar descuento">✎</span></span>
             <b id="c-desc">-$0.00</b>
           </div>
+          <div class="fila envio" id="c-envio" hidden>
+            <span>Envío</span><b id="c-envio-val">$0.00</b>
+          </div>
           <div class="fila total"><span>Total</span><b id="c-total">$0.00</b></div>
+          <div class="comanda-aviso" id="comanda-aviso" hidden>
+            <span>🍳 Comanda para <b id="comanda-cliente">—</b></span>
+            <button class="lapiz" id="btn-ver-comanda" title="Ver o editar la comanda">✎</button>
+            <button class="lapiz" id="btn-quitar-comanda" title="Quitar la comanda">✕</button>
+          </div>
           <button class="btn-cobrar" id="btn-cobrar" disabled>Cobrar</button>
         </div>
       </aside>
@@ -153,6 +218,55 @@ $cfg = leerConfig();
     </div>
   </section>
 
+  <!-- ================= CAJAS ================= -->
+  <section class="vista" id="v-cajas">
+    <div class="cajas-wrap">
+
+      <!-- Estado de mi caja: abrir, ver y cerrar -->
+      <div class="card" id="mi-caja-card">
+        <div class="card-cab">
+          <h2>🏧 Mi caja</h2>
+          <span id="mi-caja-estado"></span>
+        </div>
+        <div class="card-cue" id="mi-caja-cue">
+          <p class="parrafo">Cargando…</p>
+        </div>
+      </div>
+
+      <!-- Historial: el administrador ve todas, el vendedor las suyas -->
+      <div class="card">
+        <div class="card-cab">
+          <h2 id="cajas-titulo">Historial de cajas</h2>
+          <div class="filetools">
+            <input type="date" id="cj-desde" class="inline-date">
+            <span class="hasta">a</span>
+            <input type="date" id="cj-hasta" class="inline-date">
+            <button class="btn sm" id="cj-buscar">🔍</button>
+          </div>
+        </div>
+        <div class="envoltura">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th style="width:60px">Caja</th>
+                <?php if ($soyAdmin): ?><th style="width:150px">Cajero</th><?php endif; ?>
+                <th style="width:150px">Abrió</th>
+                <th style="width:150px">Cerró</th>
+                <th class="num" style="width:80px">Ventas</th>
+                <th class="num" style="width:110px">Fondo</th>
+                <th class="num" style="width:120px">Vendido</th>
+                <th class="num" style="width:120px">Efectivo</th>
+                <th style="width:150px">Estado</th>
+                <th class="acciones" style="width:70px"></th>
+              </tr>
+            </thead>
+            <tbody id="cajas-tb"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ================= REPORTES ================= -->
   <section class="vista" id="v-reportes">
     <div class="card" style="margin-bottom:16px">
@@ -210,118 +324,325 @@ $cfg = leerConfig();
     </div>
   </section>
 
+  <!-- ================= COCINA ================= -->
+  <section class="vista" id="v-cocina">
+    <div class="cocina-barra">
+      <div class="cocina-filtros" id="coc-filtros">
+        <button class="on" data-coc="pendiente">Nuevas <span class="pill" id="coc-n-pendiente">0</span></button>
+        <button data-coc="preparando">Preparando <span class="pill" id="coc-n-preparando">0</span></button>
+        <button data-coc="listo">Listos <span class="pill" id="coc-n-listo">0</span></button>
+        <button data-coc="cerradas">Historial</button>
+      </div>
+      <div class="filetools">
+        <label class="switch"><input type="checkbox" id="coc-ticket" checked> Imprimir al recibir</label>
+        <button class="btn sm" id="btn-coc-refrescar" title="Recargar">⟳ Actualizar</button>
+      </div>
+    </div>
+    <div class="cocina-tablero" id="coc-tablero"></div>
+  </section>
+
   <!-- ================= AJUSTES ================= -->
   <section class="vista" id="v-ajustes">
-    <div class="rejilla2">
-      <div class="card">
-        <div class="card-cab"><h2>🏪 Datos del negocio</h2></div>
-        <div class="card-cue">
-          <div class="rejilla">
-            <div class="campo"><label>Nombre</label><input id="c-negocio" maxlength="40"></div>
-            <div class="campo"><label>Símbolo de moneda</label><input id="c-moneda" maxlength="4"></div>
-            <div class="campo"><label>Dirección</label><input id="c-direccion" maxlength="60"></div>
-            <div class="campo"><label>Teléfono</label><input id="c-telefono" maxlength="30"></div>
+    <div class="ajustes">
+
+      <div class="solo-admin">
+      <h3 class="ajustes-tit">🏪 Negocio</h3>
+      <div class="rejilla2">
+        <div class="card">
+          <div class="card-cab"><h2>Datos del negocio</h2></div>
+          <div class="card-cue">
+            <div class="rejilla">
+              <div class="campo"><label>Nombre</label><input id="c-negocio" maxlength="40"></div>
+              <div class="campo"><label>Símbolo de moneda</label><input id="c-moneda" maxlength="4"></div>
+              <div class="campo" style="grid-column:1/-1"><label>Dirección</label><input id="c-direccion" maxlength="60"></div>
+              <div class="campo"><label>Teléfono</label><input id="c-telefono" maxlength="30"></div>
+              <div class="campo"><label>Siguiente folio</label><input id="c-folio" type="number" min="1"></div>
+            </div>
+            <div class="campo" style="margin-top:13px"><label>Pie del ticket</label><input id="c-pie" maxlength="80"></div>
+            <div class="rejilla" style="margin-top:13px">
+              <div class="campo"><label>Iniciales del logo</label><input id="c-logo" maxlength="2" style="text-transform:uppercase"></div>
+            </div>
+            <button class="btn pri" id="btn-c-guardar" style="margin-top:15px">💾 Guardar cambios</button>
           </div>
-          <div class="campo" style="margin-top:13px"><label>Pie del ticket</label><input id="c-pie" maxlength="80"></div>
-          <div class="rejilla" style="margin-top:13px">
-            <div class="campo"><label>Iniciales del logo</label><input id="c-logo" maxlength="2" style="text-transform:uppercase"></div>
-            <div class="campo"><label>Siguiente folio</label><input id="c-folio" type="number" min="1"></div>
-          </div>
-          <button class="btn pri" id="btn-c-guardar" style="margin-top:15px">💾 Guardar cambios</button>
+        </div>
+
+        <div class="card">
+          <div class="card-cab"><h2>📈 Estado del sistema</h2></div>
+          <div class="card-cue" id="a-estado">Cargando…</div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-cab"><h2>💾 Respaldo de datos</h2></div>
-        <div class="card-cue">
-          <p class="parrafo">
-            Tus datos viven en la base de datos MySQL de esta computadora. Descarga un respaldo
-            <strong>cada día</strong> y guárdalo en un USB o en la nube: con ese archivo se
-            reconstruye el sistema completo en otra máquina.
+      <h3 class="ajustes-tit">💳 Cobros</h3>
+      <div class="rejilla1">
+        <div class="card">
+          <div class="card-cab">
+            <h2>Medios de pago</h2>
+            <button class="btn sm pri" id="btn-mp-nuevo">+ Agregar</button>
+          </div>
+          <p class="parrafo" style="margin:12px 16px 0">
+            Cada venta queda registrada con su medio de pago. Al cerrar la caja se compara
+            el efectivo contado contra el esperado y se listan tarjetas, transferencias y
+            Mercado Pago para que nada quede sin verificar.
           </p>
-          <div style="display:flex; gap:9px; flex-wrap:wrap">
-            <a class="btn ok" href="respaldo.php?accion=descargar">⬇ Descargar respaldo (.sql)</a>
-            <a class="btn" href="respaldo.php?accion=csv">⬆ Exportar productos (CSV)</a>
-            <a class="btn" href="respaldo.php?accion=ventas_csv">⬆ Exportar ventas (CSV)</a>
-            <a class="btn" href="respaldo.php">📂 Restaurar / phpMyAdmin</a>
+          <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
+            <table class="tabla">
+              <thead><tr><th style="width:44px"></th><th>Método</th><th style="width:120px">Recibe vuelto</th><th style="width:120px">Pide referencia</th><th style="width:100px">Estado</th><th class="acciones" style="width:120px"></th></tr></thead>
+              <tbody id="a-mp-tb"></tbody>
+            </table>
           </div>
-          <p class="parrafo" style="margin-top:14px; margin-bottom:0">
-            💡 Además, en <strong>Laragon</strong> activá el respaldo automático:
-            <em>Menú → MySQL → Backup automático</em>. Eso te salva sin que tengas que acordarte.
+        </div>
+      </div>
+
+      <h3 class="ajustes-tit">📦 Mercadería</h3>
+      <div class="rejilla1">
+        <div class="card">
+          <div class="card-cab">
+            <h2>Proveedores</h2>
+            <button class="btn sm pri" id="btn-prov-nuevo">+ Agregar</button>
+          </div>
+          <div class="envoltura" style="box-shadow:none;border:0;border-radius:0; max-height:300px; overflow:auto">
+            <table class="tabla">
+              <thead><tr><th>Proveedor</th><th style="width:150px">Teléfono</th><th class="num" style="width:100px">Artículos</th><th class="acciones" style="width:120px"></th></tr></thead>
+              <tbody id="a-prov-tb"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-cab"><h2>Entradas y salidas de mercancía</h2></div>
+          <div class="card-cue">
+            <p class="parrafo" style="margin-top:0">
+              Registra compras, mermas o conteos físicos. Cada cambio queda anotado en el
+              kardex del producto, y podés cargar la compra por maple, cajón, bolsa o bidón.
+            </p>
+            <div style="display:flex; gap:9px; flex-wrap:wrap">
+              <button class="btn" id="btn-rapida-entrada">📥 Registrar entrada</button>
+              <button class="btn" id="btn-rapida-salida">📤 Registrar salida</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="ajustes-tit">💾 Datos y respaldo</h3>
+      <div class="rejilla1">
+        <div class="card">
+          <div class="card-cab"><h2>Respaldo de datos</h2></div>
+          <div class="card-cue">
+            <p class="parrafo" style="margin-top:0">
+              Tus datos viven en la base de datos MySQL de esta computadora. Descarga un respaldo
+              <strong>cada día</strong> y guárdalo en un USB o en la nube: con ese archivo se
+              reconstruye el sistema completo en otra máquina.
+            </p>
+            <div style="display:flex; gap:9px; flex-wrap:wrap">
+              <a class="btn ok" href="respaldo.php?accion=descargar">⬇ Descargar respaldo (.sql)</a>
+              <a class="btn" href="respaldo.php?accion=csv">⬆ Exportar productos (CSV)</a>
+              <a class="btn" href="respaldo.php?accion=ventas_csv">⬆ Exportar ventas (CSV)</a>
+              <a class="btn" href="respaldo.php">📂 Restaurar / phpMyAdmin</a>
+            </div>
+            <p class="parrafo" style="margin-top:14px; margin-bottom:0">
+              💡 Además, en <strong>Laragon</strong> activá el respaldo automático:
+              <em>Menú → MySQL → Backup automático</em>. Eso te salva sin que tengas que acordarte.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="solo-admin">
+      <h3 class="ajustes-tit" id="cocina">🍳 Comandas de cocina</h3>
+      <div class="rejilla2">
+
+        <div class="card">
+          <div class="card-cab">
+            <h2>Atajos de la comanda</h2>
+            <button class="btn sm pri" id="btn-atajo-nuevo">+ Agregar atajo</button>
+          </div>
+          <p class="parrafo" style="margin:12px 16px 0">
+            Son los botones que el vendedor toca en el modal de delivery, para no tener que escribir.
+            Si a un atajo le asignás un producto del catálogo, ese producto <b>se cobra y descuenta
+            stock</b> como cualquier otra línea. Si no tiene producto, es solo texto para cocina.
           </p>
+          <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th style="width:90px">Sección</th>
+                  <th style="width:130px">Botón</th>
+                  <th>Qué prepara</th>
+                  <th style="width:150px">Producto</th>
+                  <th style="width:40px"></th>
+                </tr>
+              </thead>
+              <tbody id="atajos-tb"></tbody>
+            </table>
+          </div>
         </div>
+
+        <div class="card">
+          <div class="card-cab">
+            <h2>Zonas de reparto</h2>
+            <button class="btn sm pri" id="btn-zona-nueva">+ Agregar zona</button>
+          </div>
+          <p class="parrafo" style="margin:12px 16px 0">
+            El costo se suma al total cuando el pedido es por reparto. Dejalo en 0 si no cobrás envío.
+          </p>
+          <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th>Zona</th>
+                  <th class="num" style="width:120px">Costo de envío</th>
+                  <th style="width:40px"></th>
+                </tr>
+              </thead>
+              <tbody id="zonas-tb"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
       </div>
 
-      <div class="card">
-        <div class="card-cab"><h2>📈 Estado del sistema</h2></div>
-        <div class="card-cue" id="a-estado">Cargando…</div>
-      </div>
-
-      <div class="card">
-        <div class="card-cab"><h2>📦 Entradas y salidas de mercancía</h2></div>
-        <div class="card-cue">
-          <p class="parrafo">Registra compras, mermas o conteos físicos. Cada cambio queda anotado en el kardex del producto.</p>
-          <div style="display:flex; gap:9px; flex-wrap:wrap">
-            <button class="btn" id="btn-rapida-entrada">📥 Registrar entrada</button>
-            <button class="btn" id="btn-rapida-salida">📤 Registrar salida</button>
+      <h3 class="ajustes-tit" id="usuarios">👥 Usuarios</h3>
+      <div class="rejilla1">
+        <div class="card">
+          <div class="card-cab">
+            <h2>Usuarios del sistema</h2>
+            <button class="btn sm pri" id="btn-us-nuevo">+ Agregar</button>
+          </div>
+          <p class="parrafo" style="margin:12px 16px 0">
+            El <b>administrador</b> carga productos, proveedores y precios, ajusta el stock,
+            ve e imprime todas las cajas y también puede vender. El <b>vendedor</b> abre y
+            cierra su propia caja y vende; el catálogo no lo puede tocar. El de <b>cocina</b>
+            sólo ve el tablero de comandas y marca los pedidos: no cobra ni abre caja.
+          </p>
+          <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
+            <table class="tabla">
+              <thead>
+                <tr>
+                  <th style="width:40px"></th>
+                  <th style="width:130px">Usuario</th>
+                  <th>Nombre</th>
+                  <th style="width:120px">Rol</th>
+                  <th class="num" style="width:70px">Cajas</th>
+                  <th style="width:130px">Último ingreso</th>
+                  <th style="width:90px">Estado</th>
+                  <th class="acciones" style="width:150px"></th>
+                </tr>
+              </thead>
+              <tbody id="usuarios-tb"></tbody>
+            </table>
           </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-cab">
-          <h2>💳 Medios de pago</h2>
-          <button class="btn sm pri" id="btn-mp-nuevo">+ Agregar</button>
-        </div>
-        <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
-          <table class="tabla">
-            <thead><tr><th style="width:44px"></th><th>Método</th><th style="width:110px">Referencia</th><th style="width:90px">Estado</th><th class="acciones" style="width:120px"></th></tr></thead>
-            <tbody id="a-mp-tb"></tbody>
-          </table>
-        </div>
       </div>
 
-      <div class="card">
-        <div class="card-cab">
-          <h2>🚚 Proveedores</h2>
-          <button class="btn sm pri" id="btn-prov-nuevo">+ Agregar</button>
-        </div>
-        <div class="envoltura" style="box-shadow:none;border:0;border-radius:0; max-height:280px; overflow:auto">
-          <table class="tabla">
-            <thead><tr><th>Proveedor</th><th>Teléfono</th><th class="num" style="width:90px">Artículos</th><th class="acciones" style="width:120px"></th></tr></thead>
-            <tbody id="a-prov-tb"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card" style="border-color:var(--bad)">
-        <div class="card-cab" style="border-color:var(--bad)"><h2 style="color:var(--bad)">⚠️ Zona de peligro</h2></div>
-        <div class="card-cue">
-          <p class="parrafo" style="margin-top:0">Antes de borrar se descarga un respaldo automático a la carpeta <code>datos/</code>.</p>
-          <div style="display:flex; gap:9px; flex-wrap:wrap">
-            <button class="btn peligro" data-limpiar="ventas">🗑 Borrar historial de ventas</button>
-            <button class="btn peligro" data-limpiar="productos">🗑 Borrar catálogo de productos</button>
-            <button class="btn peligro" data-limpiar="kardex">🗑 Borrar kardex</button>
+      <h3 class="ajustes-tit">💡 Ayuda</h3>
+      <div class="rejilla2">
+        <div class="card">
+          <div class="card-cab"><h2>Atajos de teclado</h2></div>
+          <div class="card-cue">
+            <ul class="atajos">
+              <li><kbd>F2</kbd> Ir a la búsqueda / enfocar para escanear</li>
+              <li><kbd>Enter</kbd> Agregar el producto buscado al ticket</li>
+              <li><kbd>F4</kbd> Cobrar la venta actual</li>
+              <li><kbd>Esc</kbd> Cerrar ventana / limpiar búsqueda</li>
+              <li><kbd>Ctrl</kbd>+<kbd>P</kbd> Imprimir el ticket abierto</li>
+              <li><kbd>Esc</kbd> en la pantalla de cobro = anular / vaciar</li>
+            </ul>
           </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-cab"><h2>💡 Atajos de teclado</h2></div>
-        <div class="card-cue">
-          <ul class="atajos">
-            <li><kbd>F2</kbd> Ir a la búsqueda / enfocar para escanear</li>
-            <li><kbd>Enter</kbd> Agregar el producto buscado al ticket</li>
-            <li><kbd>F4</kbd> Cobrar la venta actual</li>
-            <li><kbd>Esc</kbd> Cerrar ventana / limpiar búsqueda</li>
-            <li><kbd>Ctrl</kbd>+<kbd>P</kbd> Imprimir el ticket abierto</li>
-            <li><kbd>Esc</kbd> en la pantalla de cobro = anular / vaciar</li>
-          </ul>
+      <div class="solo-admin">
+      <h3 class="ajustes-tit">⚠️ Zona de peligro</h3>
+      <div class="rejilla1">
+        <div class="card" style="border-color:var(--bad)">
+          <div class="card-cab" style="border-color:var(--bad)"><h2 style="color:var(--bad)">Borrar datos</h2></div>
+          <div class="card-cue">
+            <p class="parrafo" style="margin-top:0">Antes de borrar se descarga un respaldo automático a la carpeta <code>datos/</code>.</p>
+            <div style="display:flex; gap:9px; flex-wrap:wrap">
+              <button class="btn peligro" data-limpiar="ventas">🗑 Borrar historial de ventas</button>
+              <button class="btn peligro" data-limpiar="productos">🗑 Borrar catálogo de productos</button>
+              <button class="btn peligro" data-limpiar="kardex">🗑 Borrar kardex</button>
+            </div>
+          </div>
         </div>
       </div>
+      </div>
+
     </div>
   </section>
 </main>
+
+<!-- ================= MODAL DELIVERY / COMANDA ================= -->
+<div class="velo" id="m-delivery">
+  <div class="modal ancho">
+    <div class="modal-cab">
+      <h2>🚚 Comanda para cocina</h2>
+      <button class="cerrar" data-cerrar>✕</button>
+    </div>
+    <div class="modal-cue">
+
+      <div class="campo"><label>¿Cómo es el pedido?</label>
+        <div class="segmentos" id="del-tipo">
+          <button class="on" data-tipo="delivery">🛵 Delivery</button>
+          <button data-tipo="retiro">🏠 Retiro</button>
+          <button data-tipo="mesa">🍽 Mesa</button>
+        </div>
+      </div>
+
+      <div class="rejilla2 campos">
+        <div class="campo"><label>Nombre del cliente *</label>
+          <input id="del-cliente" placeholder="A quién se lo llevamos" autocomplete="off"></div>
+        <div class="campo"><label>Teléfono</label>
+          <input id="del-telefono" placeholder="11 1234-5678" autocomplete="off"></div>
+      </div>
+
+      <div class="rejilla2 campos" id="del-zona-campos">
+        <div class="campo"><label>Zona</label>
+          <select id="del-zona"><option value="">— sin zona —</option></select></div>
+        <div class="campo"><label>Costo del envío</label>
+          <input id="del-envio" type="text" value="$0.00" readonly tabindex="-1"></div>
+      </div>
+
+      <div class="campo" id="del-dir-campo"><label>Dirección</label>
+        <input id="del-direccion" placeholder="Calle, número, piso, referencia" autocomplete="off"></div>
+
+      <div class="campo" id="del-lugar-campo" hidden><label>¿Qué mesa?</label>
+        <input id="del-lugar" placeholder="Mesa 4, barra, mostrador…" autocomplete="off"></div>
+
+      <div class="campo"><label>Notas para cocina</label>
+        <input id="del-notas" placeholder="Sin cebolla, todo bien cocido…" autocomplete="off"></div>
+
+      <hr class="sep">
+
+      <div class="campo">
+        <label>Tocá los atajos. Los que tengan producto cargado también se cobran.</label>
+        <div class="atajos" id="del-atajos"></div>
+      </div>
+
+      <div class="campo">
+        <label>O escribí algo a mano</label>
+        <div class="fila-agregar">
+          <input id="del-texto" placeholder="Ej: 1 flan con dulce de leche" autocomplete="off">
+          <span class="det" id="del-detalle-wrap" hidden>
+            <input id="del-detalle" placeholder="detalle (opcional)" autocomplete="off"></span>
+          <button class="btn" id="del-agregar-texto">Agregar</button>
+        </div>
+      </div>
+
+      <div class="campo">
+        <label>Lo que hay que preparar <span class="pill" id="del-count">0</span></label>
+        <div class="del-items" id="del-items"></div>
+      </div>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cancelar</button>
+      <button class="btn pri" id="del-guardar">Guardar comanda y cobrar</button>
+    </div>
+  </div>
+</div>
 
 <!-- ================= MODAL COBRO ================= -->
 <div class="velo" id="m-cobro">
@@ -331,6 +652,9 @@ $cfg = leerConfig();
       <div class="cobrar-total">
         <div class="cap">Total a pagar</div>
         <div class="val" id="cob-total">$0.00</div>
+        <div class="cobrar-envio" id="cob-envio-fila" hidden>
+          Incluye envío por <b id="cob-envio-detalle">$0.00</b>
+        </div>
       </div>
       <div class="metodos" id="cob-metodos">
         <button class="metodo on" data-m="Efectivo"><span class="ic">💵</span>Efectivo</button>
@@ -358,6 +682,60 @@ $cfg = leerConfig();
   </div>
 </div>
 
+<!-- ================= MODAL ATajo / ZONA ================= -->
+<div class="velo" id="m-atajo">
+  <div class="modal">
+    <div class="modal-cab"><h2 id="atk-titulo">Nuevo atajo</h2><button class="cerrar" data-cerrar>✕</button></div>
+    <div class="modal-cue">
+      <div class="rejilla2 campos">
+        <div class="campo"><label>Sección</label>
+          <input id="atk-seccion" list="atk-secciones" placeholder="Comidas" autocomplete="off">
+          <datalist id="atk-secciones">
+            <option value="Comidas"><option value="Bebidas"><option value="Tragos"><option value="Postres">
+          </datalist></div>
+        <div class="campo"><label>Botón (lo que ve el vendedor)</label>
+          <input id="atk-etiqueta" placeholder="1 pancho" autocomplete="off"></div>
+      </div>
+      <div class="campo"><label>Qué lee la cocina *</label>
+        <input id="atk-texto" placeholder="Pancho — hamburguesa completa" autocomplete="off"></div>
+      <div class="campo"><label>Detalle (opcional)</label>
+        <input id="atk-detalle" placeholder="con papas" autocomplete="off"></div>
+      <div class="campo"><label>Producto del catálogo (opcional)</label>
+        <select id="atk-producto"><option value="">— solo texto, no cobra —</option></select>
+        <p class="parrafo" style="margin:6px 0 0;font-size:12.5px">
+          Si elegís un producto, el atajo lo agrega al carrito: se cobra y descuenta stock.
+        </p>
+      </div>
+      <div class="rejilla2 campos">
+        <div class="campo"><label>Formato de venta (opcional)</label>
+          <select id="atk-formato"><option value="">— el predeterminado —</option></select></div>
+        <div class="campo"><label>Orden</label>
+          <input id="atk-orden" type="number" value="1"></div>
+      </div>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cancelar</button>
+      <button class="btn pri" id="atk-guardar">Guardar atajo</button>
+    </div>
+  </div>
+</div>
+
+<div class="velo" id="m-zona">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-cab"><h2 id="zn-titulo">Nueva zona</h2><button class="cerrar" data-cerrar>✕</button></div>
+    <div class="modal-cue">
+      <div class="campo"><label>Nombre de la zona</label>
+        <input id="zn-nombre" placeholder="Centro, Barrio Norte…" autocomplete="off"></div>
+      <div class="campo"><label>Costo de envío</label>
+        <input id="zn-costo" type="number" step="0.01" min="0" value="0"></div>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cancelar</button>
+      <button class="btn pri" id="zn-guardar">Guardar zona</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= MODAL PRODUCTO ================= -->
 <div class="velo" id="m-prod">
   <div class="modal ancho">
@@ -370,32 +748,59 @@ $cfg = leerConfig();
           <button class="btn sm peligro" id="mp-btn-sinfoto">Quitar</button>
           <input type="file" id="mp-file" accept="image/*" style="display:none">
         </div>
-        <div class="rejilla" style="flex:1;min-width:0;align-content:start">
+        <div class="rejilla mp-campos" style="flex:1;min-width:0;align-content:start">
           <div class="campo" style="grid-column:1/-1"><label>Nombre *</label><input id="mp-nombre" maxlength="60"></div>
           <div class="campo"><label>Código / código de barras</label><input id="mp-codigo" maxlength="30" spellcheck="false"></div>
           <div class="campo"><label>Categoría</label><input id="mp-categoria" maxlength="25" list="lista-cat"></div>
           <datalist id="lista-cat"></datalist>
-          <div class="campo"><label>Precio de venta *</label><input id="mp-precio" type="number" step="0.01" min="0"></div>
-          <div class="campo"><label>Precio de costo</label><input id="mp-costo" type="number" step="0.01" min="0" placeholder="0.00"></div>
+          <div class="campo"><label>Precio de venta * <span class="fuente" id="mp-precio-aviso"></span></label><input id="mp-precio" type="number" step="0.01" min="0"></div>
+          <div class="campo"><label>Costo por <span class="mp-base">unidad</span> <span class="fuente" id="mp-costo-aviso"></span></label><input id="mp-costo" type="number" step="0.01" min="0" placeholder="0.00" readonly></div>
           <div class="campo"><label>Stock actual</label><input id="mp-stock" type="number" step="0.01"></div>
           <div class="campo"><label>Stock mínimo (alerta)</label><input id="mp-minimo" type="number" step="0.01" min="0"></div>
-          <div class="campo"><label>Unidad</label>
+          <div class="campo mp-bloque">
+            <label class="check" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+              <input type="checkbox" id="mp-sin-stock" style="width:auto;height:auto">
+              Se vende sin control de stock
+            </label>
+            <p class="parrafo" style="margin:2px 0 0;font-size:12px">
+              Para lo que se prepara al momento y no sale de un stock que se cuente.
+              No se descuenta existencias ni entra en los avisos y la valuación de inventario.
+            </p>
+          </div>
+          <div class="campo"><label>Unidad (cómo se cuenta el stock)</label>
             <select id="mp-unidad">
-              <option>pieza</option><option>paquete</option><option>lata</option>
+              <option>pieza</option><option>unidad</option><option>paquete</option><option>lata</option>
               <option>botella</option><option>caja</option><option>kg</option><option>litro</option>
             </select>
           </div>
           <div class="campo"><label>Proveedor</label>
             <select id="mp-proveedor"><option value="0">— sin proveedor —</option></select>
           </div>
-          <div class="campo" style="grid-column:1/-1">
+
+          <h3 class="subt mp-bloque">📥 Formatos de compra <span class="fuente">— lo que te trae el proveedor</span></h3>
+          <p class="parrafo mp-bloque" style="margin:-6px 0 0;font-size:12.5px">
+            Maple, cajón, bolsa, caja… El precio es el de <b>una</b> presentación, y el sistema
+            calcula el costo dividiéndolo por la cantidad que trae. El stock siempre se cuenta
+            en <b><span class="mp-base">unidades</span></b>.
+          </p>
+          <div id="mp-fmt-compra" class="fmt-lista mp-bloque"></div>
+          <button class="btn sm mp-bloque" type="button" id="mp-add-compra" style="justify-self:start">+ Agregar formato de compra</button>
+
+          <h3 class="subt mp-bloque">🏷️ Formatos de venta <span class="fuente">— lo que le vendés al cliente</span></h3>
+          <p class="parrafo mp-bloque" style="margin:-6px 0 0;font-size:12.5px">
+            Docena, 2x1, media kg… Todos descuentan del stock. Ponele <b>precio fijo</b>
+            o <b>% sobre el costo</b> y el sistema te arma el precio. Si no ponés ninguno,
+            vale el precio del producto multiplicado por lo que trae el formato.
+          </p>
+          <div id="mp-fmt-venta" class="fmt-lista mp-bloque"></div>
+          <button class="btn sm mp-bloque" type="button" id="mp-add-venta" style="justify-self:start">+ Agregar formato de venta</button>
+
+          <div class="campo mp-bloque">
             <label>Observaciones</label>
             <input id="mp-observaciones" maxlength="200" placeholder="Notas internas: cambios de envase, etc.">
           </div>
-          <div class="campo" style="grid-column:1/-1">
-            <div class="aviso-linea" id="mp-margen" style="display:none">
-              <span>Margen por unidad</span><span id="mp-margen-valor"><b>—</b></span>
-            </div>
+          <div class="aviso-linea mp-bloque" id="mp-margen" style="display:none">
+            <span>Margen por unidad</span><span id="mp-margen-valor"><b>—</b></span>
           </div>
         </div>
       </div>
@@ -427,16 +832,25 @@ $cfg = leerConfig();
       <div id="ms-form" style="display:none; margin-top:15px">
         <div class="aviso-linea" id="ms-info">—</div>
         <div class="rejilla" style="margin-top:13px">
-          <div class="campo"><label>Cantidad</label><input id="ms-cant" type="number" step="0.01" min="0"></div>
+          <div class="campo"><label>Cantidad <span id="ms-cant-unidad"></span></label><input id="ms-cant" type="number" step="0.01" min="0"></div>
           <div class="campo"><label>Motivo</label><input id="ms-motivo" maxlength="60" placeholder="Compra, merma, conteo…"></div>
         </div>
         <div class="rejilla" style="margin-top:13px" id="ms-compra">
+          <div class="campo" id="ms-campo-uc" style="display:none">
+            <label>Comprar en formato</label>
+            <select id="ms-formato-compra"></select>
+          </div>
+          <div class="campo" id="ms-campo-pc" style="display:none">
+            <label>Precio del <span id="ms-pc-label">formato</span></label>
+            <input id="ms-precio-compra" type="number" step="0.01" min="0" placeholder="0.00">
+          </div>
           <div class="campo"><label>Proveedor</label>
             <select id="ms-proveedor"><option value="0">— sin proveedor —</option></select>
           </div>
           <div class="campo"><label>N.º de remito / factura</label><input id="ms-documento" maxlength="40" placeholder="REM-0000-0000"></div>
-          <div class="campo"><label>Costo unitario nuevo</label><input id="ms-costo" type="number" step="0.01" min="0" placeholder="dejar 0 = no cambiar"></div>
+          <div class="campo" id="ms-campo-costo"><label>Costo unitario nuevo</label><input id="ms-costo" type="number" step="0.01" min="0" placeholder="dejar 0 = no cambiar"></div>
         </div>
+        <div class="aviso-linea" id="ms-preview" style="display:none;margin-top:12px"></div>
         <p class="parrafo" id="ms-ayuda" style="margin:12px 0 0;font-size:12.5px"></p>
       </div>
     </div>
@@ -455,6 +869,44 @@ $cfg = leerConfig();
     <div class="modal-pie">
       <button class="btn" data-cerrar>Cerrar</button>
       <button class="btn" id="mv-imprimir">🖨 Imprimir ticket</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL PRODUCTO RAPIDO ================= -->
+<!-- Venta espontánea: el pancho que pidió Pepe, una pizza armada en el momento.
+     El producto se carga con su precio y queda en el catálogo, pero marcado
+     como "sin stock": no se le descuenta existencia ni entra en los avisos
+     de stock. El costo se deja en 0 a propósito, los valores del proveedor
+     cambian todos los días y acá no se arma una receta. -->
+<div class="velo" id="m-rapido">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-cab"><h2>Producto rápido</h2><button class="cerrar" data-cerrar>✕</button></div>
+    <div class="modal-cue">
+      <div class="campo"><label>Nombre *</label>
+        <input id="pr-nombre" maxlength="60" placeholder="Pancho, pizza especial,(fill)…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="rejilla" style="margin-top:13px">
+        <div class="campo"><label>Precio de venta *</label>
+          <input id="pr-precio" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00">
+        </div>
+        <div class="campo"><label>Categoría</label>
+          <input id="pr-categoria" maxlength="25" list="lista-cat" placeholder="Venta libre">
+          <datalist id="lista-cat"></datalist>
+        </div>
+      </div>
+      <div class="aviso-linea" id="pr-existe" style="display:none;margin-top:13px">
+        <span>Ya existe en el catálogo</span><b id="pr-existe-nombre">—</b>
+      </div>
+      <p class="parrafo" style="margin:13px 0 0">
+        Se guarda en el catálogo con este precio y queda listo para mañana.
+        No descuenta stock: si el mismo nombre ya existe, se actualiza el precio
+        en vez de duplicarlo.
+      </p>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cancelar</button>
+      <button class="btn pri" id="pr-guardar">Agregar al ticket</button>
     </div>
   </div>
 </div>
@@ -486,8 +938,113 @@ $cfg = leerConfig();
   </div>
 </div>
 
+<!-- ================= MODAL ABRIR CAJA ================= -->
+<div class="velo" id="m-abrir-caja">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-cab"><h2>🏧 Abrir caja</h2><button class="cerrar" data-cerrar>✕</button></div>
+    <div class="modal-cue">
+      <p class="parrafo" style="margin-top:0">
+        Contá el efectivo que dejás en la gaveta para empezar el turno.
+        Todas las ventas que cobres van a quedar sumadas a esta caja
+        y se van a conciliar al cerrarla.
+      </p>
+      <div class="campo">
+        <label>Efectivo inicial en la gaveta</label>
+        <input id="ac-monto" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off">
+      </div>
+      <p class="parrafo" id="ac-aviso" style="margin:10px 0 0;font-size:12.5px"></p>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cancelar</button>
+      <button class="btn ok" id="ac-ok">Abrir caja</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL CERRAR CAJA ================= -->
+<div class="velo" id="m-cerrar-caja">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-cab"><h2>🔒 Cerrar caja</h2><button class="cerrar" data-cerrar>✕</button></div>
+    <div class="modal-cue">
+      <p class="parrafo" style="margin-top:0">
+        Contá el efectivo de la gaveta y anotá cuánto hay en cada medio de pago.
+        El sistema te dice cuánto esperaba encontrar: si no coincide, escribí el motivo
+        del descuadre para que el administrador lo vea.
+      </p>
+      <div id="cc-tabla"></div>
+      <div class="campo" id="cc-motivo-campo" style="margin-top:14px; display:none">
+        <label id="cc-motivo-label">Motivo del descuadre</label>
+        <input id="cc-motivo" maxlength="200" placeholder="Ej: me quedé sin cambio para un cliente">
+      </div>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cancelar</button>
+      <button class="btn ok" id="cc-ok">Cerrar caja</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL DETALLE DE CAJA ================= -->
+<div class="velo" id="m-caja-detalle">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-cab"><h2 id="cd-titulo">Caja</h2><button class="cerrar" data-cerrar>✕</button></div>
+    <div class="modal-cue" id="cd-cue"></div>
+    <input type="hidden" id="cd-caja-datos" value="">
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cerrar</button>
+      <button class="btn" id="cd-cerrar-caja" style="display:none">🔒 Cerrar esta caja</button>
+      <button class="btn pri" id="cd-imprimir">🖨 Imprimir</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL USUARIO ================= -->
+<div class="velo" id="m-usuario">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-cab"><h2 id="mu-titulo">Usuario</h2><button class="cerrar" data-cerrar>✕</button></div>
+    <div class="modal-cue">
+      <div class="rejilla">
+        <div class="campo">
+          <label>Usuario (para entrar)</label>
+          <input id="mu-usuario" autocapitalize="none" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="campo">
+          <label>Nombre y apellido</label>
+          <input id="mu-nombre" autocomplete="off">
+        </div>
+        <div class="campo">
+          <label>Rol</label>
+          <select id="mu-rol">
+            <option value="vendedor">Vendedor — abre y cierra su caja, vende</option>
+            <option value="cocina">Cocina — sólo prepara comandas, no cobra</option>
+            <option value="admin">Administrador — control total</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Clave <span class="fuente" id="mu-clave-nota">(dejala vacía para no cambiarla)</span></label>
+          <input id="mu-clave" type="text" autocapitalize="none" spellcheck="false" autocomplete="new-password">
+        </div>
+      </div>
+      <label class="check" style="margin-top:12px">
+        <input type="checkbox" id="mu-activo" checked>
+        <span>Puede entrar al sistema</span>
+      </label>
+      <p class="parrafo" style="margin:12px 0 0;font-size:12.5px">
+        La clave se guarda cifrada. Cuando le pongas una clave nueva, el usuario
+        va a tener que cambiarla la primera vez que entre.
+      </p>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cancelar</button>
+      <button class="btn pri" id="mu-ok">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div id="avisos"></div>
 <div id="ticket"></div>
+<div id="ticket-caja"></div>
+<div id="ticket-comanda"></div>
 
 <script src="app.js?v=<?= @filemtime(__DIR__ . '/app.js') ?: '1' ?>"></script>
 </body>

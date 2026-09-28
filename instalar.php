@@ -36,7 +36,7 @@ try {
     $antes = instalado();
     crearTablas();
     paso($antes ? 'Tablas verificadas y actualizadas.' : 'Tablas creadas.', true,
-        'productos · ventas · venta_items · movimientos · config');
+        'productos · ventas · venta_items · movimientos · config · usuarios · cajas');
 
     // 4. Configuracion inicial
     $faltantes = 0;
@@ -56,6 +56,26 @@ try {
         paso('Esquema actualizado: ' . implode(' · ', $cambios) . '.');
     } catch (Throwable $e) {
         paso('No se pudieron aplicar todas las mejoras de esquema', false, $e->getMessage());
+    }
+
+    // 5b. Usuario administrador.
+    // La clave queda como "admin" pero marcada para cambiar: mientras
+    // debe_cambiar_clave siga en 1 la API no deja vender.
+    try {
+        require_once __DIR__ . '/sesion.php';
+        $nUsuarios = (int) $pdo->query('SELECT COUNT(*) FROM `usuarios`')->fetchColumn();
+        if ($nUsuarios === 0) {
+            $st = $pdo->prepare(
+                'INSERT INTO `usuarios` (usuario, nombre, clave, rol, activo, debe_cambiar_clave)
+                 VALUES (?,?,?,"admin",1,1)'
+            );
+            $st->execute(['admin', 'Administrador', password_hash('admin', PASSWORD_DEFAULT)]);
+            paso('Usuario administrador creado', true, 'usuario: admin · clave: admin (cambiala al entrar)');
+        } else {
+            paso('Ya hay ' . $nUsuarios . ' usuario(s) cargados.');
+        }
+    } catch (Throwable $e) {
+        paso('No se pudo crear el usuario administrador', false, $e->getMessage());
     }
 
     // 5. Productos de ejemplo (opcional): por navegador (?demo=1) o por consola (php instalar.php demo)
