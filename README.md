@@ -134,9 +134,15 @@ está en **`LEEME-RESPALDOS.txt`**.
 
 ## Estructura
 
-Hoy todo vive suelto en la raíz del proyecto. Funciona bien, pero es la primera cosa a
-ordenar: separar en `app/` (JS y CSS), `includes/` (PHP de servidor) y `vistas/`
-(el HTML) para que un cambio no toque un archivo de 3.000 líneas.
+Todo vive suelto en la raíz del proyecto y **por ahora se deja así a propósito**: el
+programa funciona, está comentado y `app.js` ya está partido en secciones numeradas
+(1. UTILIDADES, 2. API, 3. ESTADO… hasta la 18). Partirlo en carpetas tiene sentido
+cuando empiece a molestar, no antes.
+
+Lo único que hay que tener en cuenta al tocar `app.js`: **son scripts clásicos, no
+módulos**. Todas las secciones comparten a propósito el mismo ámbito global, y los
+eventos se enganchan en un único `DOMContentLoaded` al final. Si alguna vez se pasa a
+módulos ES, hay que revisar ese enganche.
 
 ```
 secmkiosko/

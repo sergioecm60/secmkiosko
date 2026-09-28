@@ -104,7 +104,7 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
           <button class="x" id="btn-limpiar-busca" title="Limpiar búsqueda (Esc)">✕</button>
         </div>
         <div class="barra-rapida">
-          <button class="btn sm" id="btn-rapido" title="Cargar al vuelo algo que no está en el catálogo. Se cobra con su precio y no descuenta stock.">＋ Producto rápido</button>
+          <button class="btn sm" id="btn-rapido" title="Cargar al vuelo algo que no está en el catálogo. Se cobra con su precio y no descuenta stock.">+ Producto rápido</button>
           <span class="fuente">Venta espontánea: se cobra, no se controla stock</span>
         </div>
         <div class="chips" id="filtros"></div>

@@ -4,7 +4,7 @@
  *
  *   respaldo.php                      pagina de administracion de respaldos
  *   respaldo.php?accion=descargar     descarga el volcado .sql completo
- *   respaldo.php?accion=csv          导出 productos a CSV
+ *   respaldo.php?accion=csv          exporta productos a CSV
  *   respaldo.php?accion=ventas_csv    exporta ventas a CSV
  *   respaldo.php?restaurar=1          recibe un .sql por POST y lo restaura
  */
