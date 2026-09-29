@@ -504,6 +504,8 @@ $permisos = [
     'atajo_borrar'      => ROL_ADMIN,
     'zona_guardar'      => ROL_ADMIN,
     'zona_borrar'       => ROL_ADMIN,
+    'categoria_guardar' => ROL_ADMIN,
+    'categoria_borrar'  => ROL_ADMIN,
 
     // Sólo administrador
     'config_guardar'    => ROL_ADMIN,
@@ -609,9 +611,16 @@ try {
         case 'producto':
         case 'producto_guardar':
         case 'producto_borrar':
-        case 'stock_mover':
-        case 'categorias': {
+        case 'stock_mover': {
             require __DIR__ . '/api/rutas/productos.php';
+            break;
+        }
+
+        case 'categorias':
+        case 'categorias_usadas':
+        case 'categoria_guardar':
+        case 'categoria_borrar': {
+            require __DIR__ . '/api/rutas/categorias.php';
             break;
         }
 

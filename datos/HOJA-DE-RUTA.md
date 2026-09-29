@@ -69,6 +69,36 @@ Esto no es un detalle menor. De una lista de 10 códigos de productos reales que
 la grilla, se vende, y el lector de barras nunca lo encuentra: el error se descubre cuando el
 cliente está esperando y no cuando se tipeó el número.
 
+**Las categorías las maneja el administrador, no cada producto.** Antes el filtro de Vender
+se armaba con un `Set` de lo que hubiera escrito cada producto: el sistema no sabia qué
+categorías existían y cada quien escribía la suya. Con 10 productos no se notaba; con 200 eran
+200 cosas que corregir a mano. Peor: `Bebidas` y `bebidas` cuentan como dos y Vender mostraba
+dos fichas para lo mismo.
+
+Ahora hay una tabla `categorias` (esquema **9**) que es la lista maestra, con `UNIQUE` sobre
+`nombre`. Como la collation es `utf8mb4_unicode_ci`, MySQL no distingue mayúsculas, así que el
+`UNIQUE` impide que se repitan con otra caja. El CRUD está en *Ajustes → Mercadería* y las
+tres acciones de escritura (`categoria_guardar`, `categoria_borrar`) están en el mapa de
+`api.php` como `ROL_ADMIN`; leer la lista es para cualquiera.
+
+Dos decisiones que importan:
+
+- **Renombrar mueve los productos.** Un `UPDATE productos SET categoria = ?` en la misma
+  transacción. Si no, los productos quedan apuntando a un nombre que ya no existe y
+  desaparecen de la ficha de Vender sin avisar.
+- **`productos.categoria` sigue siendo texto, no una llave foránea.** Se__
+
+parecía lo correcto, pero el buscador y los reportes comparan ese campo en varias partes
+  (`05_punto_de_venta.js` busca por `p.categoria`, el filtro agrupa por él) y pasarlo a id
+  obliga a tocar todo eso para ganar poco. Lo que sí se hace es **validar contra la tabla al
+  guardar el producto**: si viene una categoría que no está en la lista, el servidor la
+  rechaza con 422 y avisa que la cree en Ajustes. Es la barrera que importa, porque es la
+  única que no se puede esquivar desde el formulario.
+
+`Venta libre` es la excepción: la usa el atajo de carga rápida (`07_productos.js`) para los
+productos sin control de stock, así que se siembra sola en la migración y no se deja borrar.
+Si se perdiera, ese botón quedaría sin categoría con la que trabajar.
+
 **`api.php` es sólo el enrutador.** Quedó en 822 líneas (antes 1950) y cada `case` delega
 con `require __DIR__ . '/api/rutas/<archivo>.php';`; las rutas abren su propio
 `switch ($accion)`. Para tocar, por ejemplo, el cobro, se edita `api/rutas/ventas.php` y no

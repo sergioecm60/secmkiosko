@@ -108,6 +108,7 @@ async function cargarAjustesCocina() {
   estado.zonas = z.zonas || [];
   renderAjustesAtajos();
   renderAjustesZonas();
+  renderAjustesCategorias();
 }
 
 function renderAjustesAtajos() {
@@ -147,6 +148,81 @@ function renderAjustesZonas() {
       <button class="btn sm peligro" data-borrar-zona="${z.id}" title="Borrar">🗑</button>
     </td>
   </tr>`).join("");
+}
+
+// --- Categorias -------------------------------------------------------------
+// La tabla de arriba. Muestra cuantos productos tiene cada una, porque no se
+// puede borrar una que este en uso y conviene verlo antes de intentarlo.
+let editCategoria = { id: 0, nombre: "" };
+
+function renderAjustesCategorias() {
+  const tb = $("#a-cat-tb");
+  if (!tb) return;
+  if (!estado.categorias.length) {
+    tb.innerHTML = '<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--muted)">No hay categorías.</td></tr>';
+    return;
+  }
+  const usados = estado.categoriasUsadas || {};
+  tb.innerHTML = estado.categorias.map(c => {
+    const n = usados[c.nombre] || 0;
+    return `<tr>
+      <td>${esc(c.nombre)}${c.nombre === "Venta libre" ? ' <span class="marca bajo">del sistema</span>' : ""}</td>
+      <td class="num">${n}</td>
+      <td class="acciones">
+        <button class="btn sm" data-edit-cat="${c.id}" title="Editar">✎</button>
+        <button class="btn sm peligro" data-borrar-cat="${c.id}" title="Borrar">🗑</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+async function cargarCategorias() {
+  const r = await api("categorias");
+  estado.categorias = r.categorias || [];
+  const u = await api("categorias_usadas");
+  estado.categoriasUsadas = u.usadas || {};
+  renderAjustesCategorias();
+  renderFiltros();
+  pintarListaCategorias();
+}
+
+function abrirCategoria(id) {
+  const c = id ? estado.categorias.find(x => x.id === id) : null;
+  editCategoria = c ? { id: c.id, nombre: c.nombre } : { id: 0, nombre: "" };
+  $("#ct-titulo").textContent = editCategoria.id ? "Editar categoría" : "Nueva categoría";
+  $("#ct-nombre").value = editCategoria.nombre;
+  abrirModal("#m-categoria");
+  setTimeout(() => $("#ct-nombre").focus(), 120);
+}
+
+async function guardarCategoria() {
+  const nombre = $("#ct-nombre").value.trim();
+  if (!nombre) { aviso("La categoría necesita un nombre.", "mal"); return; }
+  const datos = { id: editCategoria.id, nombre };
+  try {
+    await api("categoria_guardar", datos);
+    cerrarModal("#m-categoria");
+    await cargarCategorias();
+    aviso("Categoría guardada.", "ok");
+  } catch (e) { aviso(e.message, "mal"); }
+}
+
+async function borrarCategoria(id) {
+  const c = estado.categorias.find(x => x.id === id);
+  if (!c) return;
+  const n = (estado.categoriasUsadas || {})[c.nombre] || 0;
+  // Se avisa acá y no sólo en el servidor para no gastar un viaje, pero la
+  // cuenta va primero: si hay productos, el borrado no va a pasar igual.
+  if (n > 0) {
+    aviso(`"${c.nombre}" tiene ${n} producto(s). Reubicá esos productos primero.`, "mal");
+    return;
+  }
+  if (!await confirmar("Borrar la categoría", `"${c.nombre}" no tiene ningún producto. ¿Borrarla?`)) return;
+  try {
+    await api("categoria_borrar", { id });
+    await cargarCategorias();
+    aviso("Categoría borrada.", "ok");
+  } catch (e) { aviso(e.message, "mal"); }
 }
 
 let editAtajo = { id: 0, seccion: "", etiqueta: "", texto: "", detalle: "", producto_id: 0, formato_unidad: "", orden: 1 };

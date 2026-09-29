@@ -75,6 +75,7 @@ async function iniciar() {
     // Zonas y atajos se cargan siempre: el botón de delivery los necesita.
     api("comanda_atajos").then(r => { estado.atajos = r.atajos || []; }).catch(() => {});
     api("zonas").then(r => { estado.zonas = r.zonas || []; }).catch(() => {});
+    api("categorias").then(r => { estado.categorias = r.categorias || []; }).catch(() => {});
     if (esAdmin()) cargarAjustesCocina().catch(() => {});
   } catch (e) {
     document.body.innerHTML = '<div class="vacio" style="height:100vh">'

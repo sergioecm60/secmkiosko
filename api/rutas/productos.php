@@ -59,8 +59,21 @@ switch ($accion) {
             if ($esNuevo && $nombre === '') {
                 salida(['ok' => false, 'error' => 'El nombre del producto es obligatorio.'], 422);
             }
-            $codigo    = pTxt('codigo', 40);
-            $categoria = pTxt('categoria', 60);
+    $codigo    = pTxt('codigo', 40);
+    $categoria = trim(pTxt('categoria', 60));
+
+    // La lista de categorias la maneja el administrador; aca se corta lo que
+    // venga con otra forma para que no se cuelgue sola otra vez. Vacio esta
+    // permitido (un producto sin agrupar), lo que no se permite es inventarse
+    // una categoria que no existe.
+    if ($categoria !== '') {
+        $choca = $bd->prepare('SELECT COUNT(*) FROM categorias WHERE nombre = ?');
+        $choca->execute([$categoria]);
+        if ((int) $choca->fetchColumn() === 0) {
+            salida(['ok' => false, 'error' => 'Esa categoría no está en la lista. Creala en Ajustes o elegí una de las que hay.'], 422);
+        }
+    }
+
             $precio    = max(0, pNum('precio'));
             $minimo    = max(0, pNum('minimo'));
             $unidad    = pTxt('unidad', 20) ?: 'pieza';
@@ -346,9 +359,5 @@ switch ($accion) {
             salida(['ok' => true, 'stock' => $ahora, 'costo' => $costoNuevo]);
         }
 
-        case 'categorias': {
-            $st = $bd->query("SELECT DISTINCT categoria FROM productos WHERE categoria <> '' AND categoria IS NOT NULL ORDER BY categoria");
-            salida(['ok' => true, 'categorias' => $st->fetchAll(PDO::FETCH_COLUMN)]);
-        }
+  }
 
-}

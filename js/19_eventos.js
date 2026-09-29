@@ -207,6 +207,16 @@ function conectar() {
   escuchar("#atk-guardar", "click", guardarAtajo);
   escuchar("#zn-guardar", "click", guardarZona);
 
+  /* --- categorias --- */
+  escuchar("#btn-cat-nuevo", "click", () => abrirCategoria(0));
+  escuchar("#ct-guardar", "click", guardarCategoria);
+  escuchar("#a-cat-tb", "click", e => {
+    const ed = e.target.closest("[data-edit-cat]");
+    const bo = e.target.closest("[data-borrar-cat]");
+    if (ed) abrirCategoria(Number(ed.dataset.editCat));
+    if (bo) borrarCategoria(Number(bo.dataset.borrarCat));
+  });
+
   /* --- cobro --- */
   $$("#cob-metodos .metodo").forEach(b => b.addEventListener("click", () => {
     estado.metodoCobro = b.dataset.m;

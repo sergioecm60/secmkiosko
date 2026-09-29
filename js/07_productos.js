@@ -2,6 +2,15 @@
 
 /*   7. PRODUCTOS
    ===================================================================== */
+
+// El <datalist> que ofrece el campo Categoría del formulario. Va aparte porque
+// hay que repintarlo también cuando el administrador agrega o renombra una
+// desde Ajustes, sin tener que volver a renderizar toda la grilla.
+function pintarListaCategorias() {
+  const listaCats = $("#lista-cat");
+  if (listaCats) listaCats.innerHTML = categorias().map(c => '<option value="' + esc(c) + '">').join("");
+}
+
 function renderProductos() {
   const tb = $("#p-tbody");
   const q = norm(estado.busquedaP);
@@ -22,9 +31,7 @@ function renderProductos() {
     return;
   }
 
-  const cats = categorias();
-  const listaCats = $("#lista-cat");
-  if (listaCats) listaCats.innerHTML = cats.map(c => '<option value="' + esc(c) + '">').join("");
+  pintarListaCategorias();
 
   tb.innerHTML = lista.map(p => {
     const e = estadoStock(p);

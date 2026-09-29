@@ -401,6 +401,25 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
         </div>
 
         <div class="card">
+          <div class="card-cab">
+            <h2>Categorías</h2>
+            <button class="btn sm pri" id="btn-cat-nuevo">+ Agregar</button>
+          </div>
+          <div class="card-cue">
+            <p class="parrafo" style="margin-top:0">
+              Son las fichas que se ven arriba en <b>Vender</b>. Sólo el administrador las
+              crea y las cambia. Al renombrar una, los productos que la tenían la siguen.
+            </p>
+          </div>
+          <div class="envoltura" style="box-shadow:none;border:0;border-radius:0; max-height:240px; overflow:auto">
+            <table class="tabla">
+              <thead><tr><th>Categoría</th><th class="num" style="width:110px">Productos</th><th class="acciones" style="width:120px"></th></tr></thead>
+              <tbody id="a-cat-tb"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-cab"><h2>Entradas y salidas de mercancía</h2></div>
           <div class="card-cue">
             <p class="parrafo" style="margin-top:0">
@@ -729,6 +748,20 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
     <div class="modal-pie">
       <button class="btn" data-cerrar>Cancelar</button>
       <button class="btn pri" id="zn-guardar">Guardar zona</button>
+    </div>
+  </div>
+</div>
+
+<div class="velo" id="m-categoria">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-cab"><h2 id="ct-titulo">Nueva categoría</h2><button class="cerrar" data-cerrar>✕</button></div>
+    <div class="modal-cue">
+      <div class="campo"><label>Nombre de la categoría</label>
+        <input id="ct-nombre" placeholder="Bebidas, Botanas…" maxlength="60" autocomplete="off"></div>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cancelar</button>
+      <button class="btn pri" id="ct-guardar">Guardar categoría</button>
     </div>
   </div>
 </div>

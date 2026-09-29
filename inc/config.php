@@ -749,6 +749,46 @@ function actualizarEsquema(): array
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $hechas[] = 'tabla zonas';
 
+    // Categorias: la lista maestra de las que el administrador maneja.
+    // productos.categoria sigue siendo texto (no se quiere romper el
+    // buscador ni los reportes), pero el nombre tiene que existir aca.
+    $pdo->exec('CREATE TABLE IF NOT EXISTS `categorias` (
+        `id`     SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `nombre` VARCHAR(60)  NOT NULL,
+        `activo` TINYINT(1)   NOT NULL DEFAULT 1,
+        `orden`  SMALLINT     NOT NULL DEFAULT 0,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uq_nombre` (`nombre`),
+        KEY `ix_activo` (`activo`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    $hechas[] = 'tabla categorias';
+
+    // Primera vez: se traen las categorias que ya/usan los productos.
+    // MySQL no distingue mayusculas con utf8mb4_unicode_ci, asi que "Bebidas"
+    // y "bebidas" son la misma fila: eso evita que Vender muestre dos fichas
+    // para lo mismo. Los productos quedan con la forma que se puso primero.
+    $st = $pdo->query("SELECT DISTINCT categoria FROM productos
+                       WHERE categoria IS NOT NULL AND TRIM(categoria) <> ''
+                       ORDER BY categoria");
+    foreach ($st->fetchAll() as $fila) {
+        $nombre = trim($fila['categoria']);
+        if ($nombre === '') continue;
+        $pdo->prepare('INSERT IGNORE INTO categorias (nombre, orden) VALUES (?, 0)')->execute([$nombre]);
+    }
+
+    // "Venta libre" la usa el atajo de carga rapida de Productos (07_productos.js):
+    // es la unica categoria que el sistema necesita siempre, asi que se siembra
+    // aunque ningun producto la este usando todavia.
+    $pdo->prepare('INSERT IGNORE INTO categorias (nombre, orden) VALUES (?, 999)')->execute(['Venta libre']);
+
+    // Y ahora al reves: los productos toman la forma canonica de su fila.
+    // Si alguien escribio "bebidas" a mano queda "Bebidas" y las fichas de
+    // Vender no se parten en dos.
+    $pdo->exec('UPDATE productos p
+                JOIN categorias c ON p.categoria = c.nombre COLLATE utf8mb4_unicode_ci
+                SET p.categoria = c.nombre
+                WHERE p.categoria <> c.nombre');
+
     $pdo->exec('CREATE TABLE IF NOT EXISTS `comandas` (
         `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
         `venta_id`     INT UNSIGNED NULL,
@@ -923,7 +963,7 @@ function actualizarEsquema(): array
  * nuevo se aplica solo en el primer request. La marca en `config` evita
  * repetir el trabajo: solo corre de nuevo si el codigo pide una version mayor.
  */
-const ESQUEMA_VERSION = 8;
+const ESQUEMA_VERSION = 9;
 
 function migrarSiHaceFalta(): void
 {

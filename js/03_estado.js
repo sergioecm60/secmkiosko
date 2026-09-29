@@ -25,6 +25,8 @@ const estado = {
   esAdmin: document.body.getAttribute("data-rol") === "admin",
   atajos: [],
   zonas: [],
+  categorias: [],
+  categoriasUsadas: {},
   cocFiltro: "pendiente",
   cocTimer: null,
   /* --- sesión, rol y caja --- */
@@ -42,11 +44,19 @@ function puedeVender() { return esAdmin() || estado.miRol === "vendedor"; }
 
 const prodPorId = (id) => estado.productos.find(p => p.id === Number(id)) || null;
 
+// Las fichas de Vender salen de la lista maestra que maneja el administrador,
+// no de lo que haya escrito cada producto. Si la lista todavia no llego (el
+// arranque es asincrono) se arma con los productos para no mostrar la pantalla
+// vacia; las mayusculas no parten nada porque el UNIQUE no las distingue.
 function categorias() {
+  if (estado.categorias && estado.categorias.length) {
+    return estado.categorias.map(c => c.nombre);
+  }
   const set = new Set();
   estado.productos.forEach(p => { if (p.categoria) set.add(p.categoria); });
   return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
 }
+
 
 function estadoStock(p) {
   if (p.stock <= 0) return { clase: "mal", texto: "Agotado" };
