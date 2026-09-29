@@ -1,234 +1,98 @@
 # secmkiosko
 
-Sistema de punto de venta, comandas de cocina y control de existencias para kiosco y almacén.
-Corre íntegramente en una PC con Windows, **sin internet y sin servicios en la nube**.
+Punto de venta, comandas de cocina y control de existencias para kiosco, almacén y delivery.
+Corre entero en una PC, sin internet y sin servicios en la nube.
 
-![PHP](https://img.shields.io/badge/PHP-8.1%2B-777BB4) ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1) ![nginx](https://img.shields.io/badge/servidor-nginx-009639) ![Licencia](https://img.shields.io/badge/licencia-MIT-green)
+**PHP 8** · **MySQL 8** · **JavaScript** · **CSS** · **nginx** o **Apache** · **Windows** o **Linux** · MIT
 
 ---
 
-## Qué hace
+## Qué es
 
-- **Punto de venta** con búsqueda por nombre o código de barras, carrito con cantidades
-  y cobro por efectivo, tarjeta o transferencia, con cálculo de vuelto.
-- **Producto rápido**: lo que se vende espontáneamente (un pancho, una pizza armada en el
-  momento) se carga con su precio y queda en el catálogo. Va marcado **sin control de stock**,
-  así que no descuenta existencias, no genera kardex y no aparece en los avisos ni en la
-  valuación de inventario. Si el nombre ya existe, actualiza el precio en vez de duplicarlo.
-- **Comanda de cocina, separada del cobro**: la comanda es el papel con lo que hay que
-  preparar, no la venta. El cajero carga los productos y cobra en el carrito (de ahí sale el
-  remito), y aparte saca la comanda desde el botón que está al lado de *Producto rápido*:
-  copia el carrito, suma atajos o escribe líneas a mano, y la imprime para llevársela a la
-  cocina. Para lo que se consume en el local no hay que completar nada: el tipo arranca en
-  *En el local* y nombre, mesa, zona y dirección son opcionales. La comanda no se ata a una
-  venta ni fuerza a cobrar.
-- **Cocina (KDS)**: tablero de pedidos con estados (nueva, preparando, lista, entregada),
-  tiempo transcurrido y cuenta de cuántos hay en cada estado. Atajos de comanda para los
-  productos que siempre se piden: el administrador los crea y los edita con el lápiz desde
-  el propio panel de la comanda, y el vendedor sólo los usa.
-- **Roles y permisos**: administrador, vendedor y cocina. Cada rol ve y toca lo que le
-  corresponde; la cocina no cobra y el vendedor no entra a ajustes.
-- **Costo de compra y margen** por producto. El costo se congela al vender, así el
-  margen histórico no cambia cuando después sube el precio de compra.
-- **Formatos de compra y venta**: un maple, una caja de 24 o una docena tienen su propio
-  precio, y el precio del producto sale del formato predeterminado dividido por su factor.
-- **Control de existencias**: el stock se descuenta solo al vender, avisa cuando un producto
-  queda por debajo del mínimo y avisa si una venta deja el inventario en negativo.
-- **Kardex**: cada entrada, salida, venta o anulación queda registrada con stock anterior,
-  stock actual, fecha y motivo.
-- **Entradas de mercancía** con proveedor y número de remito: sabés de qué compra salió
-  cada caja. Si cargás el costo nuevo, se actualiza el margen del producto.
-- **Historial de ventas** con anulación (devuelve el stock) y reimpresión de tickets.
-- **Reportes**: ganancia bruta, costo de mercancía, margen, ventas por hora, productos más
-  vendidos, reparto por forma de pago y lista de productos por reponer.
-- **Medios de pago configurables**: agregás Mercado Pago, débito, cobros, etc., y definís
-  cuáles reciben vuelto y cuáles piden referencia.
-- **Proveedores** con sus datos y notas.
-- **Respaldo y restauración** de toda la base en un archivo `.sql`.
+El cajero carga productos, cobra y sale un remito. Aparte saca la comanda de cocina, que es
+un papel con lo que hay que preparar: no está atada a la venta ni obliga a cobrar. El stock
+se descuenta solo, queda el kardex de cada movimiento y los reportes muestran ganancia y
+margen con el costo congelado al vender.
 
 ## Requisitos
 
-- Windows 10 u 11
-- [Laragon](https://laragon.org/download) (Full o Lite) — **nginx**, PHP y MySQL
-- Un navegador (Chrome o Edge). Para cobrar: **http://secmkiosko.test:8080**
+PHP 8 con `pdo_mysql`, MySQL 8 (o MariaDB 10.4+) y cualquier servidor web que ejecute PHP.
+En Windows, [Laragon](https://laragon.org/download) trae las tres cosas y las levanta con
+**Start All**. En Linux, nginx con `php-fpm` o Apache con `mod_php` sirviendo la carpeta.
 
-> **Ojo: este proyecto corre sobre nginx, no sobre Apache.** Antes de esta versión el
-> repo estaba preparado para Apache; ya no. Ver [Servidor nginx](#servidor-nginx).
+**No hace falta ningún `.htaccess` ni regla de reescritura**: el frontend llama siempre a
+`api.php?accion=...` por ruta directa.
 
-## Instalación
+## Puesta en marcha
 
-1. Copiá la carpeta `secmkiosko` dentro de `C:\laragon\www\`.
-2. Abrí Laragon y presioná **Start All** (que arranque nginx y MySQL).
-3. Entrá a <http://secmkiosko.test:8080/instalar.php> y seguí los pasos.
-4. Entrá a <http://secmkiosko.test:8080> con el usuario `admin` y la clave `admin`.
-   El sistema te obliga a cambiarla en el primer ingreso.
-
-La primera vez podés cargar productos de ejemplo desde el instalador, y después reemplazarlos
-por tu catálogo real (o importarlos desde un CSV).
-
-## Servidor nginx
-
-Laragon genera el vhost solo, en
-`C:\laragon\etc\nginx\sites-enabled\auto.secmkiosko.test.conf`:
-
-```nginx
-server {
-    listen 8080;
-    server_name secmkiosko.test *.secmkiosko.test;
-    root "C:/laragon/www/secmkiosko";
-    index index.html index.htm index.php;
-
-    location / {
-        try_files $uri $uri/ /index.php$is_args$args;
-        autoindex on;
-    }
-    location ~ \.php$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass php_upstream;
-    }
-    charset utf-8;
-}
+```bash
+git clone https://github.com/sergioecm60/secmkiosko.git
 ```
 
-Datos del server en esta máquina:
+Copiá la carpeta al raíz del sitio, abrí `instalar.php` y seguí los pasos. Entrás con
+`admin` / `admin`; el sistema te obliga a cambiar la clave en el primer ingreso.
 
-| Qué | Valor |
+La base de datos **no viaja en el repo**: se crea al instalar, o se restaura desde un
+respaldo `.sql` generado en *Ajustes → Respaldos*.
+
+---
+
+## Dónde se puede montar
+
+El servidor y el sistema operativo no importan: no hay `.htaccess`, ni reglas de
+reescritura, ni rutas del sistema de archivos. El frontend llama siempre a
+`api.php?accion=...` por ruta directa, así que la misma instalación anda con
+**nginx + php-fpm** o con **Apache + mod_php**.
+
+### Red local, varias PCs
+
+Lo habitual: una PC con la base y el kiosco, y el resto de las PCs de la red entran por
+el navegador a la IP de esa máquina.
+
+- **Windows:** instalá [XAMPP](https://www.apachefriends.org/) o
+  [Laragon](https://laragon.org/download) en la PC que hace de servidor y abrí el puerto
+  del servidor web en el firewall (80 u 8080).
+- Desde cualquier otra PC se entra con `http://IP-DEL-SERVIDOR/secmkiosko/`.
+- Cada cajero entra con su usuario. El sistema exige caja abierta antes de cobrar y cada
+  uno sólo anula lo que está en su caja, así que varios pueden vender al mismo tiempo
+  sobre el mismo stock sin pisarse.
+
+### Linux, física o virtual
+
+Sirve igual en un servidor propio, en una VM o en la nube. Lo único a tener en cuenta es
+el **MySQL**: la app se conecta desde la misma máquina donde corre PHP, así que conviene
+atarlo a `127.0.0.1` y no dejarlo escuchando en toda la red.
+
+### Exponerlo a internet
+
+**No abras el puerto tal cual.** El sistema está pensado para una red de confianza y la
+conexión es en HTTP plano: sin HTTPS las contraseñas y la cookie de sesión viajan en
+claro. Antes de exponerlo hace falta, como mínimo:
+
+1. **HTTPS** con un proxy adelante (nginx con certificado, Caddy o Apache con TLS).
+2. **Un túnel o VPN** en lugar de abrir puertos: WireGuard, Tailscale o similar. Es la
+   opción más simple y evita dejar el servicio expuesto a todo internet.
+3. **MySQL atado a `127.0.0.1`**, con el puerto 3306 cerrado en el firewall.
+4. Cambiar la clave de fábrica en el primer ingreso, como ya pide el sistema.
+
+> En LAN, sin salir de la red de confianza, alcanza con el firewall y los usuarios del
+> sistema. Para internet, lo de arriba es obligatorio.
+
+---
+
+## Documentación
+
+| | |
 |---|---|
-| Servidor | nginx 1.27.3, puerto **8080** (no 80) |
-| vhost | `secmkiosko.test` → `C:/laragon/www/secmkiosko` |
-| PHP | FastCGI vía `php_upstream` (php-cgi en `127.0.0.1:10987`) |
-| Vhost por defecto | `localhost:8080`, sirve cualquier carpeta de `www/` |
-
-Diferencias con Apache que importan:
-
-- **No hay `.htaccess` y no debe haberlos.** nginx no los lee. Si algún día hace falta
-  una regla de reescritura, va en el vhost de arriba.
-- **La cookie de sesión es del host.** Entrando por `secmkiosko.test:8080` la sesión vive
-  en ese host; si después abrís `localhost:8080/secmkiosko` en la misma pestaña, el navegador
-  no manda la cookie y la API responde *"tu sesión se venció"*. Es normal: usá siempre la
-  misma dirección.
-- Para editar el vhost a mano, sacale el prefijo `auto.` al archivo, si no Laragon lo pisa.
+| [`datos/HOJA-DE-RUTA.md`](datos/HOJA-DE-RUTA.md) | Estado del proyecto, decisiones, cómo está armado y qué falta |
+| [`datos/ejemplo/RESUMEN-TRABAJO.md`](datos/ejemplo/RESUMEN-TRABAJO.md) | Resumen de traspaso |
+| [`LEEME-RESPALDOS.txt`](LEEME-RESPALDOS.txt) | Qué se sube a git y qué no, y qué hacer si subís datos reales |
 
 ## Respaldos
 
-Es lo más importante: **descargá un respaldo todos los días**.
-Está en *Ajustes → Respaldos*, y también se crea solo antes de cualquier borrado.
-
-Para migrar a otra computadora: instalá Laragon, copiá la carpeta `secmkiosko` a `www`,
-ejecutá `instalar.php` una vez y restaurá el `.sql`.
-
-### Qué se sube a git y qué no
-
-| Carpeta | ¿En git? | Contenido |
-|---|---|---|
-| `datos/ejemplo/` | ✅ sí, **por ahora** | Volcado con datos de **prueba** |
-| `datos/` (resto) | ❌ **nunca** | Respaldos reales: costos, márgenes, ventas, proveedores |
-
-El `.gitignore` bloquea `datos/*` y solo deja pasar `datos/ejemplo/`. Es a propósito:
-un respaldo real contiene tu información de negocio, y en un repositorio público
-queda expuesta de forma permanente (el historial de git no se borra de verdad).
-
-Para regenerar el respaldo de ejemplo, doble clic en **`respaldar-ejemplo.bat`**.
-El script te avisa si encuentra ventas en la base antes de escribir nada.
-
-> **Pendiente:** `datos/ejemplo/` se va a eliminar del repositorio. Mientras tanto se sigue
-> manteniendo y versionando, así que no tires el `.gitignore` ni la carpeta sin avisar.
-
-Si alguna vez subiste un respaldo real por error, el procedimiento para limpiarlo
-está en **`LEEME-RESPALDOS.txt`**.
-
-## Estructura
-
-Todo vive suelto en la raíz del proyecto y **por ahora se deja así a propósito**: el
-programa funciona, está comentado y `app.js` ya está partido en secciones numeradas
-(1. UTILIDADES, 2. API, 3. ESTADO… hasta la 18). Partirlo en carpetas tiene sentido
-cuando empiece a molestar, no antes.
-
-Lo único que hay que tener en cuenta al tocar `app.js`: **son scripts clásicos, no
-módulos**. Todas las secciones comparten a propósito el mismo ámbito global, y los
-eventos se enganchan en un único `DOMContentLoaded` al final. Si alguna vez se pasa a
-módulos ES, hay que revisar ese enganche.
-
-```
-secmkiosko/
-├── index.php              Interfaz del punto de venta (contiene el HTML de todas las vistas)
-├── app.js                 Lógica de la interfaz
-├── estilos.css            Hoja de estilos
-├── api.php                API JSON (productos, ventas, comandas, cajas, reportes, kardex)
-├── config.php             Conexión a la base, esquema, respaldos y utilidades
-├── sesion.php             Inicio de sesión, roles y control de permisos
-├── login.php              Pantalla de ingreso
-├── salir.php              Cierre de sesión
-├── instalar.php           Crea la base y las tablas
-├── respaldo.php           Descarga y restauracion de respaldos
-├── respaldar-ejemplo.bat  Genera el respaldo de datos de prueba
-├── respaldar-ejemplo.php  (el script que llama el .bat)
-├── LEEME-RESPALDOS.txt    Qué se sube a git y qué no
-├── LICENSE
-└── datos/
-    ├── ejemplo/           Volcado de prueba (se versiona, se va a eliminar)
-    └── respaldo_*.sql     Respaldos reales (ignorados por git)
-```
-
-## Base de datos
-
-Esquema actual: **7** (`config.esquema_version`). `instalar.php` y `config.php` lo actualizan
-solos, así que no hace falta tocar la base a mano.
-
-| Tabla | Contenido |
-|---|---|
-| `productos` | Catálogo, precio de venta, **costo**, stock, stock mínimo, categoría, unidad, proveedor, **`sin_stock`** |
-| `productos_formatos` | Formatos de compra y venta (docena, maple, caja) con factor, precio y margen |
-| `ventas` | Cabecera: folio, fecha, totales, medio de pago, anulación, envío, caja |
-| `venta_items` | Detalle de cada venta, con el **costo congelado al vender** para el margen histórico |
-| `movimientos` | Kardex de inventario, con **proveedor y número de remito** |
-| `proveedores` | Datos de proveedores |
-| `medios_pago` | Métodos de pago configurables (icono, si recibe vuelto, si pide referencia) |
-| `usuarios` | Usuarios, roles y estado |
-| `cajas` | Apertura y cierre de caja por usuario |
-| `caja_cierre_metodos` | Conteo declarado por medio de pago al cerrar la caja |
-| `comandas` | Comandas de cocina (en el local, para llevar o delivery) |
-| `comanda_items` | Ítems de cada comanda |
-| `comanda_atajos` | Atajos de comanda (los productos de siempre) |
-| `zonas` | Zonas de reparto con precio de envío |
-| `config` | Datos del negocio, moneda, folios, tema, versión del esquema |
-
-### La columna `sin_stock`
-
-Es lo que distingue a un producto de venta libre de uno normal:
-
-| | Producto normal | Producto de venta libre |
-|---|---|---|
-| Descuenta stock al vender | sí | **no** |
-| Genera movimiento en el kardex | sí | **no** |
-| Repone stock al anular la venta | sí | **no** |
-| Avisa "agotado" o "stock bajo" | sí | **no** |
-| Sale en faltantes / valuación | sí | **no** |
-| Admite movimientos de stock | sí | **no** (el backend los rechaza) |
-
-El costo se deja en 0 a propósito: los valores del proveedor cambian todos los días y armar
-una receta por producto preparado no está a la altura del negocio todavía. Lo que manda es el
-precio que se cobra.
-
-## Atajos de teclado
-
-| Tecla | Acción |
-|---|---|
-| `F2` | Ir a la búsqueda (para escanear) |
-| `Enter` | Agregar el producto buscado |
-| `F4` | Abrir el cobro |
-| `Esc` | Cerrar ventana / limpiar búsqueda / borrar lo tipeado en el cobro |
-
-## Notas de seguridad
-
-- La base es local. No expongas el puerto 8080 a internet sin poner un proxy con HTTPS.
-- La API usa sentencias preparadas y rechaza peticiones desde orígenes externos.
-- El login responde el mismo mensaje para usuario inexistente y clave mala, a propósito.
-- Las credenciales de MySQL se pueden sobrescribir con variables de entorno
-  (`KIOSCO_DB_HOST`, `KIOSCO_DB_USER`, `KIOSCO_DB_PASS`, `KIOSCO_DB_NAME`)
-  para no tener que tocar el código.
-- En el respaldo de ejemplo las claves quedan saneadas a `admin`/`admin` con cambio
-  de clave obligatorio.
+**Descargá uno todos los días** desde *Ajustes → Respaldos*. También se genera solo antes de
+cualquier borrado. Un respaldo real trae costos, márgenes y ventas, así que está bloqueado
+por `.gitignore` a propósito.
 
 ## Licencia
 

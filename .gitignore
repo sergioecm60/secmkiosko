@@ -5,6 +5,7 @@
 # Subirlos a un repositorio público los deja expuestos de forma permanente.
 datos/*
 !datos/ejemplo/
+!datos/*.md
 
 # Archivos de diagnostico y pruebas locales
 _diag.php

@@ -2242,7 +2242,7 @@ async function renderAjustes() {
   try {
     const r = await api("estado");
     const info = [
-      ["Servidor web", "Apache + PHP " + r.php_version],
+      ["Servidor web", (r.servidor || "desconocido") + " · PHP " + r.php_version],
       ["Base de datos", "MySQL " + r.mysql_version],
       ["Productos en catálogo", numeroLocal(r.productos, 0)],
       ["Ventas de hoy", numeroLocal(r.hoy.ventas, 0) + " · " + dinero(r.hoy.total)],
