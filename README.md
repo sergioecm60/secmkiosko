@@ -37,6 +37,27 @@ respaldo `.sql` generado en *Ajustes → Respaldos*.
 
 ---
 
+## Estructura
+
+```
+index.php        El kiosco (contiene el HTML de todas las vistas)
+login.php        Ingresar y cambiar clave
+sesion.php       Sesión, roles y permisos
+config.php       Conexión, esquema y helpers
+api.php          Enrutador: recibe ?accion= y carga la ruta que corresponde
+api/rutas/       La API, partida por responsabilidad (productos, ventas, cajas, ...)
+js/              La lógica del navegador, en módulos numerados por orden de carga
+estilos.css      Todo el CSS
+instalar.php     Instalador web
+respaldo.php     Respaldo y restauración de la base
+datos/           Respaldos .sql (ignorados por git, menos `datos/ejemplo/`)
+```
+
+Para tocar una parte del sistema se va directo al archivo que la maneja: el cobro está en
+`api/rutas/ventas.php` y en `js/06_cobro.js`. No hay que bucear en un archivo único.
+
+---
+
 ## Dónde se puede montar
 
 El servidor y el sistema operativo no importan: no hay `.htaccess`, ni reglas de

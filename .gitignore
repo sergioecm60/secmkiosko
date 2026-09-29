@@ -11,6 +11,7 @@ datos/*
 _diag.php
 _prueba.php
 *.log
+*.bak
 
 # Sistema
 Thumbs.db

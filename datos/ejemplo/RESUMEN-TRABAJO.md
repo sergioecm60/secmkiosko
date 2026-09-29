@@ -1,5 +1,11 @@
 # Resumen de trabajo — secmkiosko
 
+> **Ojo, este documento es una foto de un momento.** Describe el sistema como estaba cuando
+> se escribió, con `api.php` y `app.js` monolitos y sin subcarpetas de código. Después se
+> partieron los dos: hoy la API está en `api/rutas/` y el navegador carga módulos de `js/`.
+> Para el estado actual mandan [`../HOJA-DE-RUTA.md`](../HOJA-DE-RUTA.md). Lo que sigue se
+> conserva como registro de por qué se decidió cada cosa.
+
 Documento de traspaso. Resume qué se hizo, por qué, cómo está armado el sistema hoy y qué
 queda pendiente. Escrito para que otro shell o persona pueda retomar sin leer todo el código.
 

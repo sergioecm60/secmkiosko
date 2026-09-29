@@ -25,27 +25,56 @@ El detalle día por día está en
 
 ## 2. Cómo está armado
 
-### Estructura plana, y a propósito
+### Backend enrutado, frontend en módulos
 
-No hay subcarpetas de código. Funciona, está comentado y `app.js` ya está partido en
-secciones numeradas. Partirlo en carpetas tiene sentido cuando empiece a molestar.
+`api.php` y `app.js` fueron monolitos de 1950 y 3325 líneas. Partir cualquier cambio
+era arriesgoso, así que ambos están partidos por responsabilidad. El código no se reescribió:
+el contenido de los módulos es el mismo, byte a byte, que el del monolito.
 
 ```
-index.php      El kiosco (contiene el HTML de todas las vistas)
-app.js         Toda la lógica del navegador
-estilos.css    Todo el CSS
-api.php        API JSON: todo el CRUD y las acciones de negocio
-config.php     Conexión, esquema (ESQUEMA_VERSION = 7) y helpers
-sesion.php     Sesión, roles y control de permisos
-login.php      Ingresar y cambiar clave
-salir.php      Cerrar sesión
-instalar.php   Instalador web
-respaldo.php   Respaldo y restauración de la base
+index.php        El kiosco (contiene el HTML de todas las vistas)
+login.php        Ingresar y cambiar clave
+salir.php        Cerrar sesión
+sesion.php       Sesión, roles y control de permisos
+config.php       Conexión, esquema (ESQUEMA_VERSION = 7) y helpers
+estilos.css      Todo el CSS
+instalar.php     Instalador web
+respaldo.php     Respaldo y restauración de la base
+
+api.php          Enrutador: recibe ?accion= y hace require de la ruta que corresponde
+api/rutas/       11 archivos, uno por responsabilidad
+js/              21 módulos del navegador, numerados en orden de carga
 ```
 
-**Ojo con `app.js`:** son scripts clásicos, no módulos. Todas las secciones comparten a
-propósito el mismo ámbito global y los eventos se enganchan en un único `DOMContentLoaded`
-al final. Si alguna vez se pasa a módulos ES, hay que revisar ese enganche.
+**`api.php` es sólo el enrutador.** Quedó en 822 líneas (antes 1950) y cada `case` delega
+con `require __DIR__ . '/api/rutas/<archivo>.php';`; las rutas abren su propio
+`switch ($accion)`. Para tocar, por ejemplo, el cobro, se edita `api/rutas/ventas.php` y no
+se busca dentro de 800 líneas.
+
+| Ruta | Qué maneja |
+|---|---|
+| `productos.php` | alta, edición, baja, stock y categorías |
+| `ventas.php` | carrito, cobro, comprobantes y anulación |
+| `inventario.php` | kardex |
+| `reportes.php` | ganancia, márgenes, ventas por hora y faltantes |
+| `configuracion.php` | ajustes del negocio y respaldos |
+| `cajas.php` | apertura, cierre y conciliación |
+| `usuarios.php` | sesión y datos del usuario conectado |
+| `admin_usuarios.php` | listado de usuarios |
+| `usuario_crud.php` | alta, baja y cambio de clave de usuarios |
+| `comandas.php` | comanda de cocina y atajos |
+| `zonas.php` | zonas de delivery y su costo |
+
+**Ojo con `js/`:** siguen siendo **scripts clásicos, no módulos ES**. Comparten a propósito
+el mismo ámbito global y los eventos se enganchan en un único `DOMContentLoaded` al final
+(`js/21_arranque.js`). El prefijo numérico **define el orden de carga** y `index.php` los
+incluye en ese orden, así que un módulo no puede usar en su nivel superior algo definido en
+un módulo de número mayor. Si alguna vez se pasa a módulos ES, hay que revisar ese enganche.
+
+Al partir archivos hay que verificar tres cosas, porque un corte mal hecho no se ve: que
+cada archivo tenga los comentarios balanceados, que no queden declaraciones de nivel
+superior repetidas entre módulos (fatal al cargar) y que el conjunto reconstructo dé el
+mismo código que el monolito.
 
 ### Servidor web: nginx o Apache, indistinto
 
@@ -54,13 +83,13 @@ La app **no depende del servidor web**. Se verificó que no usa `.htaccess`, `mo
 a `api.php?accion=...` por ruta directa. No hay reescritura de URLs, así que la misma
 instalación funciona con nginx + php-fpm o con Apache + mod_php.
 
-En esta máquina corre **nginx** en el puerto 8080, con vhost `secmkiosko.test` generado
+En esta máquina corre **nginx** en el puerto 8081, con vhost `secmkiosko.test` generado
 por Laragon en `C:\laragon\etc\nginx\sites-enabled\auto.secmkiosko.test.conf`.
 **Verificado también sobre Apache**, respondiendo 200 en `login.php`, `index.php` y
 `api.php`, que es lo que sostiene la afirmación del README.
 
-**La cookie de sesión está atada al host.** Si entrás por `secmkiosko.test:8080` la sesión
-vive en ese host; si abrís `localhost:8080/secmkiosko` en la misma pestaña, el navegador no
+**La cookie de sesión está atada al host.** Si entrás por `secmkiosko.test:8081` la sesión
+vive en ese host; si abrís `localhost:8081/secmkiosko` en la misma pestaña, el navegador no
 manda la cookie y la API responde *"tu sesión se venció"*. **Probá siempre contra la misma
 dirección**, o los tests fallan con síntomas que no dicen la verdad
 (`api is not defined`, `ReferenceError: agregarItemComanda is not defined`).

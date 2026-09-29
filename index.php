@@ -1043,6 +1043,38 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
 <div id="ticket-caja"></div>
 <div id="ticket-comanda"></div>
 
-<script src="app.js?v=<?= @filemtime(__DIR__ . '/app.js') ?: '1' ?>"></script>
+<?php
+// Los modulos de js/ se cargan en orden y como scripts clasicos: comparten
+// el ambito global, asi que el prefijo numerico define el orden de carga.
+// El numero del archivo es la seccion original de app.js.
+$modulos = [
+    '01_utilidades',
+    '02_api',
+    '03_estado',
+    '04_carrito',
+    '05_punto_de_venta',
+    '06_cobro',
+    '07_productos',
+    '08_movimientos_de_mercancer_a',
+    '09_historial',
+    '10_detalle_de_venta',
+    '11_reportes',
+    '12_ajustes',
+    '13_csv_de_productos',
+    '14_modales',
+    '15_cajas',
+    '16_usuarios',
+    '17_carga_de_datos',
+    '18_navegacion',
+    '19_eventos',
+    '20_exportar_historial',
+    '21_arranque',
+];
+foreach ($modulos as $modulo) {
+    $archivo = __DIR__ . '/js/' . $modulo . '.js';
+    $v = @filemtime($archivo) ?: '1';
+    echo '<script src="js/' . $modulo . '.js?v=' . $v . '"></script>' . "\n";
+}
+?>
 </body>
 </html>
