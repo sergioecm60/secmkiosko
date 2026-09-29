@@ -6,7 +6,7 @@
  * mientras `debe_cambiar_clave` esté en 1 no se entra al punto de venta.
  */
 declare(strict_types=1);
-require __DIR__ . '/sesion.php';
+require __DIR__ . '/inc/sesion.php';
 
 if (!baseExiste()) {
     header('Location: instalar.php');
@@ -99,7 +99,7 @@ $titulo = texto(valorConfig('pin', ''), 60); // si hay pin, se muestra arriba
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ingresar · <?= htmlspecialchars($marca, ENT_QUOTES) ?></title>
-<link rel="stylesheet" href="estilos.css">
+<link rel="stylesheet" href="css/estilos.css">
 <style>
   /* El login es una pantalla propia: centra el formulario y deja el
      fondo tranquilo, sin la barra ni el panel del punto de venta. */

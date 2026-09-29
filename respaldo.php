@@ -9,7 +9,7 @@
  *   respaldo.php?restaurar=1          recibe un .sql por POST y lo restaura
  */
 declare(strict_types=1);
-require __DIR__ . '/config.php';
+require __DIR__ . '/inc/config.php';
 
 if (!instalado()) {
     header('Location: instalar.php');
@@ -207,7 +207,7 @@ $info = [
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Respaldos — Kiosco</title>
-<link rel="stylesheet" href="estilos.css?v=1">
+<link rel="stylesheet" href="css/estilos.css?v=1">
 <style>
   body{display:block; overflow:auto}
   .pagina{max-width:960px; margin:0 auto; padding:26px 18px 60px}

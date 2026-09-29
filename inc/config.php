@@ -431,7 +431,8 @@ function entero($n, int $defecto = 0): int
 /** Crea la carpeta de respaldos si no existe. */
 function carpetaDatos(string $sub = ''): string
 {
-    $base = __DIR__ . DIRECTORY_SEPARATOR . 'datos';
+    // Este archivo vive en inc/, asi que la carpeta de respaldos esta un nivel arriba.
+    $base = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'datos';
     if (!is_dir($base)) {
         @mkdir($base, 0775, true);
     }

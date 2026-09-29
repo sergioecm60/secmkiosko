@@ -13,7 +13,7 @@
  * salvo esta subcarpeta.
  */
 declare(strict_types=1);
-require __DIR__ . '/config.php';
+require __DIR__ . '/inc/config.php';
 
 if (PHP_SAPI !== 'cli') {
     exit("Este script se ejecuta desde la consola, no desde el navegador.\n");

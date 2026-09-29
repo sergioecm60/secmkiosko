@@ -33,18 +33,28 @@ el contenido de los módulos es el mismo, byte a byte, que el del monolito.
 
 ```
 index.php        El kiosco (contiene el HTML de todas las vistas)
+api.php          Enrutador: recibe ?accion= y hace require de la ruta que corresponde
 login.php        Ingresar y cambiar clave
 salir.php        Cerrar sesión
-sesion.php       Sesión, roles y control de permisos
-config.php       Conexión, esquema (ESQUEMA_VERSION = 7) y helpers
-estilos.css      Todo el CSS
 instalar.php     Instalador web
 respaldo.php     Respaldo y restauración de la base
 
-api.php          Enrutador: recibe ?accion= y hace require de la ruta que corresponde
 api/rutas/       11 archivos, uno por responsabilidad
+inc/             config.php (conexión, esquema ESQUEMA_VERSION = 7, helpers) y
+                 sesion.php (sesión y control de permisos)
 js/              21 módulos del navegador, numerados en orden de carga
+css/estilos.css  Todo el CSS
+datos/           Respaldos .sql (ignorados por git, menos `datos/ejemplo/`)
 ```
+
+**La raíz es la lista de direcciones del sistema.** Un archivo está ahí si y sólo si el
+navegador lo puede pedir por URL. `config.php` y `sesion.php` no tienen dirección propia
+—siempre entran por `require`—, así que viven en `inc/` y no ensucian la raíz.
+
+Ojo con esto al tocar `inc/config.php`: `carpetaDatos()` resuelve la carpeta de respaldos
+con `dirname(__DIR__)`, no con `__DIR__`, justamente porque el archivo está un nivel más
+abajo que `datos/`. Con `__DIR__` los respaldos se irían a escribir en `inc/datos` y
+`respaldo.php` mostraría la carpeta vacía.
 
 **`api.php` es sólo el enrutador.** Quedó en 822 líneas (antes 1950) y cada `case` delega
 con `require __DIR__ . '/api/rutas/<archivo>.php';`; las rutas abren su propio

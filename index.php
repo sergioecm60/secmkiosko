@@ -3,7 +3,7 @@
  * Kiosco — interfaz del punto de venta.
  */
 declare(strict_types=1);
-require __DIR__ . '/sesion.php';
+require __DIR__ . '/inc/sesion.php';
 
 if (!instalado()) {
     header('Location: instalar.php');
@@ -34,7 +34,7 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title><?= htmlspecialchars($cfg['negocio'], ENT_QUOTES, 'UTF-8') ?> — Kiosco</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128722;</text></svg>">
-<link rel="stylesheet" href="estilos.css?v=<?= @filemtime(__DIR__ . '/estilos.css') ?: '1' ?>">
+<link rel="stylesheet" href="css/estilos.css?v=<?= @filemtime(__DIR__ . '/css/estilos.css') ?: '1' ?>">
 </head>
 <body class="<?= ($cfg['tema'] ?? 'claro') === 'ocuro' ? 'ocuro' : '' ?>"
       data-rol="<?= htmlspecialchars($miRol, ENT_QUOTES, 'UTF-8') ?>">

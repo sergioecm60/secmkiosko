@@ -5,7 +5,7 @@
  * Se puede abrir desde el navegador o ejecutar con:  php instalar.php
  */
 declare(strict_types=1);
-require __DIR__ . '/config.php';
+require __DIR__ . '/inc/config.php';
 
 $log  = [];
 $malas = false;
@@ -62,7 +62,7 @@ try {
     // La clave queda como "admin" pero marcada para cambiar: mientras
     // debe_cambiar_clave siga en 1 la API no deja vender.
     try {
-        require_once __DIR__ . '/sesion.php';
+        require_once __DIR__ . '/inc/sesion.php';
         $nUsuarios = (int) $pdo->query('SELECT COUNT(*) FROM `usuarios`')->fetchColumn();
         if ($nUsuarios === 0) {
             $st = $pdo->prepare(

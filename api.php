@@ -4,8 +4,8 @@
  * Uso:  api.php?accion=nombre      (GET)  o   api.php?accion=nombre  (POST, cuerpo JSON)
  */
 declare(strict_types=1);
-require __DIR__ . '/config.php';
-require __DIR__ . '/sesion.php';
+require __DIR__ . '/inc/config.php';
+require __DIR__ . '/inc/sesion.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');

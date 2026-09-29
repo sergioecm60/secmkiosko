@@ -41,17 +41,22 @@ respaldo `.sql` generado en *Ajustes → Respaldos*.
 
 ```
 index.php        El kiosco (contiene el HTML de todas las vistas)
-login.php        Ingresar y cambiar clave
-sesion.php       Sesión, roles y permisos
-config.php       Conexión, esquema y helpers
 api.php          Enrutador: recibe ?accion= y carga la ruta que corresponde
-api/rutas/       La API, partida por responsabilidad (productos, ventas, cajas, ...)
-js/              La lógica del navegador, en módulos numerados por orden de carga
-estilos.css      Todo el CSS
+login.php        Ingresar y cambiar clave
+salir.php        Cerrar sesión
 instalar.php     Instalador web
 respaldo.php     Respaldo y restauración de la base
+
+api/rutas/       La API, partida por responsabilidad (productos, ventas, cajas, ...)
+inc/             config.php (conexión, esquema, helpers) y sesion.php (sesión y permisos)
+js/              La lógica del navegador, en módulos numerados por orden de carga
+css/estilos.css  Todo el CSS
 datos/           Respaldos .sql (ignorados por git, menos `datos/ejemplo/`)
 ```
+
+En la raíz queda **sólo lo que el navegador pide por URL** (más los documentos). Lo que sólo
+se incluye desde otro archivo, como `config.php` y `sesion.php`, vive en `inc/`: no tienen
+dirección propia, entonces no ensucian la raíz ni aparecen en los listados del servidor.
 
 Para tocar una parte del sistema se va directo al archivo que la maneja: el cobro está en
 `api/rutas/ventas.php` y en `js/06_cobro.js`. No hay que bucear en un archivo único.
