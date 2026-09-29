@@ -124,11 +124,16 @@ async function abrirProducto(id) {
     refrescarMargen();
     pintarFormatos("compra", p.formatos_compra || []);
     pintarFormatos("venta", p.formatos_venta || []);
+    // El codigo se cargo por codigo, no lo escribio nadie: sin esto el aviso
+    // de repetido no apareceria al editar.
+    revisarCodigoBarras();
     await cargarKardex(id);
   } else {
     $("#mp-titulo").textContent = "Nuevo producto";
     ["#mp-nombre", "#mp-codigo", "#mp-categoria", "#mp-precio", "#mp-costo",
      "#mp-minimo", "#mp-observaciones"].forEach(s => { $(s).value = ""; });
+    $("#mp-codigo-aviso").textContent = "";
+    $("#mp-codigo").classList.remove("mal-codigo");
     $("#mp-stock").value = 0;
     $("#mp-sin-stock").checked = false;
     $("#mp-unidad").value = "pieza";
@@ -339,13 +344,32 @@ function revisarCodigoBarras() {
   const nota = $("#mp-codigo-aviso");
   if (!campo || !nota) return;
   const c = campo.value.trim();
-  if (c === "" || codigoAceptable(c)) {
+  if (c === "") {
     campo.classList.remove("mal-codigo");
     nota.textContent = "";
     return;
   }
-  campo.classList.add("mal-codigo");
-  nota.textContent = "debería terminar en " + digitoVerificador(c);
+  // Primero el digito verificador: un codigo mal formado no sirve ni para
+  // buscar duplicados, asi que se corta ahi.
+  if (!codigoAceptable(c)) {
+    campo.classList.add("mal-codigo");
+    nota.textContent = "debería terminar en " + digitoVerificador(c);
+    return;
+  }
+  campo.classList.remove("mal-codigo");
+
+  // Ahora el repetido. El servidor lo rechaza al guardar, pero ahi el cajero
+  // ya lleno todo el formulario: enterlate el aviso mientras escanea, que es
+  // como se da de alta un producto. El propio producto se ignora cuando se
+  // esta editando, si no siempre seria "repetido" consigo mismo.
+  const choque = estado.productos.find(p =>
+    p.codigo === c && p.id !== (estado.editId || 0));
+  if (choque) {
+    campo.classList.add("mal-codigo");
+    nota.textContent = "ya lo tiene " + choque.nombre;
+    return;
+  }
+  nota.textContent = "";
 }
 
 async function guardarProducto() {
