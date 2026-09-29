@@ -7,8 +7,10 @@ queda pendiente. Escrito para que otro shell o persona pueda retomar sin leer to
 - **Stack:** PHP 8.3 y MySQL 8.4 sobre Laragon, **nginx** (no Apache), JS vanilla en el
   navegador, sin frameworks ni build, sin servicios en la nube. Corre entero en una PC Windows.
 - **Repo:** <https://github.com/sergioecm60/secmkiosko>, rama `main`.
-- **Último commit:** `86b6a19`.
-- **Fecha del resumen:** 2026-09-28.
+- **Último commit de código:** `86b6a19` (la comanda separada del cobro).
+  Después de ése sólo hay commits de documentación, así que para el comportamiento de la
+  aplicación `86b6a19` es la referencia.
+- **Fecha del cierre:** 2026-09-28. Estado: todo commiteado y subido, árbol limpio.
 
 ---
 
@@ -202,14 +204,25 @@ Además, mientras `debe_cambiar_clave = 1` la API rechaza todo salvo `clave_camb
 
 ---
 
-## 6. Estado de la base ahora
+## 6. Estado de la base al cierre
 
 49 productos, 242 formatos, 3 zonas, 14 atajos de comanda, 4 medios de pago, 1 proveedor,
 1 usuario, 1 caja, 0 ventas, 0 ítems de venta, 0 movimientos, 0 comandas.
 
-Pendiente de confirmar: el producto **id 61, "pancho"** (`sin_stock = 1`, categoría Almacen,
-sin formatos, creado 2026-09-28 22:19) no estaba en el baseline de 48 y no lo creó ninguno de
-los tests de esta sesión. No se borró porque parece cargado a mano. Decidir si se queda.
+### El producto "pancho"
+
+Existe un producto **id 61, "pancho"** (`sin_stock = 1`, categoría Almacen, precio 2000, sin
+formatos, creado 2026-09-28 a las 22:19) que no estaba en el baseline de 48 productos y que
+**no creó ninguno de los tests de esta sesión**: no tiene formatos, no aparece en ninguna
+venta, comanda ni movimiento, y su nombre no sigue el patrón de los productos de prueba.
+
+Por eso se decidió **dejarlo**. Borrar un producto es destructivo e irreversible, y en el peor
+caso se hubiera tirado algo que el usuario cargó a mano. Queda anotado acá para que mañana no
+vuelva a llamar la atención: si sobra, se borra con una línea y no rompe nada.
+
+Si se decide conservarlo como producto real, conviene cargarle un formato de venta, porque el
+precio de los productos con formato se deriva del formato predeterminado y este no tiene
+ninguno.
 
 ---
 
@@ -223,7 +236,10 @@ los tests de esta sesión. No se borró porque parece cargado a mano. Decidir si
    porque las líneas se fusionan sumando. Decidir si se hace idempotente, si se pide
    confirmación, o si se limpia la comanda en curso antes de copiar.
 3. **`ir("cocina")` no limpia `estado.cocTimer`.** Detalle previo, sin relación con la comanda.
-4. Decidir qué hacer con "pancho" (§6).
+
+Los tres son cambios chico y ninguno rompe nada. Nada de esto se empezó a tocar hoy a propósito:
+falta decidir con el usuario, y el segundo es una decisión de cómo debería comportarse la UI,
+no un bug con una única respuesta obvia.
 
 ---
 
@@ -274,7 +290,7 @@ transportar el archivo por fuera del repo.
 Estas son las cosas que costaron encontrar bugs. Si se tocan, hay que volver a probar.
 
 1. **El precio se recalcula en el servidor.** Jamás confiar en el precio que manda el navegador.
-2. **`sin_stock` no toca inventario.** Sin movimiento, sin kartes, sin valuación.
+2. **`sin_stock` no toca inventario.** Sin movimiento de kardex, sin valuación.
 3. **Reutilizar un producto no pisa stock, costo ni proveedor.**
 4. **`norm()` antes de comparar claves de línea**, para que "Pan", " pan" y "PAN" sean la
    misma línea de comanda.
@@ -283,3 +299,23 @@ Estas son las cosas que costaron encontrar bugs. Si se tocan, hay que volver a p
 7. **La clave de fábrica no opera:** `debe_cambiar_clave = 1` bloquea todo.
 8. **Cocina no cobra**, aunque tenga la sesión abierta.
 9. **Probar siempre contra `secmkiosko.test:8080`.**
+
+---
+
+## 11. Estado al cierre del 2026-09-28
+
+- Rama `main` limpia y sincronizada con `origin/main`.
+- Código en `86b6a19`; este documento y su cierre van en los commits siguientes.
+- Pruebas: 41/41 API y 35/35 navegador (producto rápido), 33/33 comanda, 15/15 atajos y
+  permisos. Total de la última corrida: 48/48.
+- Lint: PHP (`php -l`) y JS (`node --check`) limpios. Todos los archivos versionados son
+  UTF-8 válido, sin CJK ni caracteres de reemplazo.
+- Base verificada y sin datos de prueba: 0 ventas, 0 comandas, 1 usuario, 14 atajos.
+- Sin archivos temporales en el repo y sin procesos de prueba corriendo.
+- Salud de la app confirmada sin sesión: `login.php` 200, `index.php` 302 al login,
+  `api.php?accion=sesion_info` responde `{"ok":true,"usuario":null,"caja":null}` y las
+  acciones de negocio sin sesión se rechazan con 401.
+
+**Recordatorio para la otra PC:** la base no viaja en el repo. Hay que correr `instalar.php`,
+o restaurar un `respaldo.php` transportado por fuera del repo. Sin eso arranca vacío: sin
+productos, sin zonas y sin los 14 atajos de comanda.
