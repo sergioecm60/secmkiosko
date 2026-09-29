@@ -774,7 +774,9 @@ function renderAtajos() {
           ${esc(a.etiqueta)}
         </button>
         ${estado.esAdmin ? `<button class="atajo-ed" data-editar-atajo="${a.id}"
-                title="Editar este atajo">✎</button>` : ""}
+                title="Editar este atajo">✎</button>
+              <button class="atajo-borrar" data-borrar-atajo-comanda="${a.id}"
+                title="Borrar este atajo">🗑</button>` : ""}
       </span>`).join("")}</div>`).join("");
 }
 
@@ -1953,8 +1955,8 @@ function mostrarVenta(v, recienHecha) {
       <div class="campo"><label>Fecha</label><strong>${fechaHora(v.fecha)}</strong></div>
       <div class="campo"><label>Método de pago</label><strong>${esc(v.metodo)}</strong></div>
     </div>
-    <div class="envoltura"><table class="tabla">
-      <thead><tr><th>Artículo</th><th class="num" style="width:130px">Cant. × precio</th><th class="num" style="width:110px">Importe</th></tr></thead>
+    <div class="envoltura"><table class="tabla tabla-detalle">
+      <thead><tr><th>Artículo</th><th class="num">Cant. × precio</th><th class="num">Importe</th></tr></thead>
       <tbody>${filas}</tbody>
     </table></div>
     <div class="aviso-linea" style="margin-top:12px; background:var(--panel2)">
@@ -2971,6 +2973,30 @@ async function guardarAtajo() {
   } catch (e) { aviso(e.message, "mal"); }
 }
 
+/**
+ * Borra un atajo. Se usa desde el panel de la comanda y desde Ajustes, asi
+ * que el aviso aclara que se pierde el boton pero no el producto del
+ * catalogo, que es lo que la gente suele temer.
+ */
+async function borrarAtajo(id) {
+  const a = estado.atajos.find(x => x.id === Number(id));
+  if (!a) { aviso("Ese atajo ya no existe.", "aviso-w"); return; }
+  const conProducto = !!a.producto_id;
+  const ok = await confirmar(
+    'Borrar el atajo "' + a.etiqueta + '"',
+    conProducto
+      ? 'Desaparece el botón de la comanda. El producto del catálogo no se borra ni se toca su stock.'
+      : 'Desaparece el botón de la comanda. No tiene producto del catálogo asociado.'
+  );
+  if (!ok) return;
+  try {
+    await api("atajo_borrar", { id: Number(id) });
+    await cargarAjustesCocina();
+    renderAtajos();
+    aviso('Atajo "' + a.etiqueta + '" borrado.', "ok");
+  } catch (e) { aviso(e.message, "mal"); }
+}
+
 function abrirZona(id) {
   const z = id ? estado.zonas.find(x => x.id === id) : null;
   editZona = z ? { id: z.id, nombre: z.nombre, costo: z.costo } : { id: 0, nombre: "", costo: 0 };
@@ -3185,10 +3211,14 @@ function conectar() {
 
   escuchar("#com-zona", "change", aplicarZona);
 
-  escuchar("#com-atajos", "click", e => {
-    // El lápiz edita; el resto del botón usa el atajo. Chocarían si no.
+  escuchar("#com-atajos", "click", async e => {
+    // El lapiz edita, la papelera borra, y el resto del boton usa el atajo.
+    // Si no se distinguen aca, tocar la papelera terminaria agregando una
+    // linea a la comanda.
     const ed = e.target.closest("[data-editar-atajo]");
     if (ed) { abrirAtajo(Number(ed.dataset.editarAtajo)); return; }
+    const bo = e.target.closest("[data-borrar-atajo-comanda]");
+    if (bo) { await borrarAtajo(Number(bo.dataset.borrarAtajoComanda)); return; }
     const b = e.target.closest("[data-atajo]");
     if (!b) return;
     usarAtajo(b.dataset.atajo);
@@ -3257,14 +3287,7 @@ function conectar() {
     const ed = e.target.closest("[data-edit-atajo]");
     const bo = e.target.closest("[data-borrar-atajo]");
     if (ed) abrirAtajo(Number(ed.dataset.editAtajo));
-    if (bo) {
-      if (await confirmar("Borrar el atajo", "Se pierde el botón, no los productos.")) {
-        try {
-          await api("atajo_borrar", { id: Number(bo.dataset.borrarAtajo) });
-          await cargarAjustesCocina();
-        } catch (ex) { aviso(ex.message, "mal"); }
-      }
-    }
+    if (bo) await borrarAtajo(Number(bo.dataset.borrarAtajo));
   });
   escuchar("#zonas-tb", "click", async e => {
     const ed = e.target.closest("[data-edit-zona]");

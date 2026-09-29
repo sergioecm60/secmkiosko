@@ -388,6 +388,18 @@ body[data-rol="vendedor"] .solo-admin{display:none !important}
 .tabla .num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
 .tabla .acciones{text-align:right; white-space:nowrap}
 .tabla .fuente{color:var(--muted)}
+/* Detalle de venta: vive en un modal de 470 px, asi que el nombre del
+   articulo necesita su lugar. Las columnas de importes se angostas y el
+   nombre se parte en varias lineas antes que empujar la tabla a scroll. */
+.tabla-detalle{table-layout:fixed; min-width:0}
+.tabla-detalle th:first-child{width:auto}
+.tabla-detalle th:nth-child(2){width:112px}
+.tabla-detalle th:nth-child(3){width:92px}
+.tabla-detalle td{white-space:normal; word-break:break-word; line-height:1.35}
+/* En pantallas angostas se scrollea en vez de dejar la columna en 30 px. */
+@container modal (max-width:380px){
+  .tabla-detalle{min-width:330px}
+}
 .avatar{
   width:34px; height:34px; border-radius:8px; background:var(--panel2); display:grid; place-items:center;
   font-size:17px; overflow:hidden; flex:0 0 34px;
@@ -406,13 +418,28 @@ body[data-rol="vendedor"] .solo-admin{display:none !important}
 .mp-campos{gap:13px 14px}
 .mp-bloque{grid-column:1/-1; margin-top:20px}
 .mp-bloque:first-child{margin-top:0}
-@media (max-width:640px){
+/* La foto se apila segun el ancho del PROPIO modal, no el de la ventana.
+   Con una media query esto fallaba: con la ventana en 800px y el modal en
+   380px la foto seguia al costado y los campos quedaban sin lugar. */
+@container modal (max-width:640px){
   .con-foto{flex-direction:column}
   .con-foto>.col-foto{
     position:static; flex-direction:row; align-items:center; width:100%;
     padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:4px;
   }
   .col-foto .avatar.grande{width:64px;height:64px;font-size:26px}
+}
+/* Sin soporte de container queries (navegador muy viejo) queda el
+   comportamiento por ventana, que es mejor que nada. */
+@supports not (container-type: inline-size){
+  @media (max-width:640px){
+    .con-foto{flex-direction:column}
+    .con-foto>.col-foto{
+      position:static; flex-direction:row; align-items:center; width:100%;
+      padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:4px;
+    }
+    .col-foto .avatar.grande{width:64px;height:64px;font-size:26px}
+  }
 }
 .atajos{margin:0; padding-left:18px; font-size:13.5px; color:var(--muted); line-height:2}
 kbd{
@@ -431,19 +458,44 @@ kbd{
 .stat .val{font-size:26px; font-weight:800; margin-top:5px; font-variant-numeric:tabular-nums; letter-spacing:-.5px}
 .stat .sub{font-size:12px; color:var(--muted); margin-top:3px}
 .stat.acento .val{color:var(--brand)}
-.barras{display:flex; align-items:flex-end; gap:4px; height:180px; padding:22px 4px 0}
-.barras .b{flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:5px; height:100%}
-.barras .barra{width:100%; max-width:34px; background:linear-gradient(180deg,var(--brand),var(--brand2)); border-radius:5px 5px 0 0; min-height:2px; position:relative; transition:height 300ms}
+/* Las 24 horas siempre se muestran, asi que el ancho minimo por barra es lo
+   que evita que al achicar la ventana se vuelvan lineas de 1 px. Si igual
+   no entra, el contenedor scrollea en vez de aplastarlas. */
+.barras{
+  display:flex; align-items:flex-end; gap:4px; height:180px; padding:22px 4px 0;
+  overflow-x:auto; overflow-y:hidden; scrollbar-width:thin;
+}
+.barras .b{
+  flex:1 1 0; min-width:15px; display:flex; flex-direction:column;
+  justify-content:flex-end; align-items:center; gap:5px; height:100%;
+}
+.barras .barra{
+  width:100%; max-width:34px; background:linear-gradient(180deg,var(--brand),var(--brand2));
+  border-radius:5px 5px 0 0; min-height:2px; position:relative; transition:height 300ms;
+}
 .barras .b:hover .barra{filter:brightness(1.15)}
 .barras .lb{font-size:10.5px; color:var(--muted); white-space:nowrap}
 .barras .vl{position:absolute; top:-19px; left:50%; transform:translateX(-50%); font-size:10.5px; color:var(--muted); white-space:nowrap; font-weight:600}
+/* Con menos de 30 px por barra los importes arriba se pisan entre si. */
+@media (max-width:560px){
+  .barras{gap:2px}
+  .barras .vl{display:none}
+  .barras .b{min-width:11px}
+}
 
 /* ---------------- MODALES ---------------- */
 .velo{
   position:fixed; inset:0; background:rgba(10,16,28,.55); backdrop-filter:blur(2px);
   display:none; align-items:center; justify-content:center; z-index:100; padding:20px;
+  overflow:auto;
 }
 .velo.on{display:flex}
+/* Con poca altura el modal centrado se salia por arriba y por abajo. Se
+   alinea al principio y se scrollea el velo entero. */
+@media (max-height:560px){
+  .velo{align-items:flex-start; padding:12px}
+  .modal{max-height:none}
+}
 .modal{
   background:var(--panel); border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,.35);
   width:100%; max-width:470px; max-height:90vh; display:flex; flex-direction:column; overflow:hidden;
@@ -453,7 +505,9 @@ kbd{
 @keyframes pop{from{transform:scale(.96) translateY(8px); opacity:0}}
 .modal-cab{display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line)}
 .modal-cab h2{font-size:17px}
-.modal-cue{padding:18px; overflow:auto; flex:1}
+/* container-type para que las @container midan el modal y no la ventana.
+   sin esto la consulta de arriba no tendria contra que compararse. */
+.modal-cue{padding:18px; overflow:auto; flex:1; container-type:inline-size; container-name:modal}
 .modal-pie{padding:14px 18px; border-top:1px solid var(--line); display:flex; gap:10px; justify-content:flex-end; background:var(--panel2); flex-wrap:wrap}
 .cerrar{width:32px; height:32px; border:0; background:transparent; border-radius:8px; cursor:pointer; font-size:18px; color:var(--muted)}
 .cerrar:hover{background:var(--line2)}
@@ -709,6 +763,13 @@ body.ocuro .com-tipo.mesa{background:#33164d; color:#d8b4fe}
   font-size:14px;
 }
 .atajo-ed:hover{border-color:var(--brand); color:var(--brand)}
+/* El boton de borrar va pegado al lapiz: mismo alto, sin separacion. */
+.atajo-borrar{
+  min-height:40px; padding:0 9px; cursor:pointer; border-radius:0 10px 10px 0;
+  border:1px solid var(--line); border-left:0; background:var(--panel2);
+  color:var(--muted); font-size:14px;
+}
+.atajo-borrar:hover{border-color:var(--bad); color:var(--bad); background:var(--badbg)}
 .atajo{
   min-height:40px; padding:7px 13px; border-radius:10px; cursor:pointer;
   border:1px solid var(--line); background:var(--panel2); color:var(--ink);
