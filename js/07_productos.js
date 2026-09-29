@@ -323,11 +323,39 @@ async function cargarKardex(id) {
   } catch (e) { /* sin kardex */ }
 }
 
+/**
+ * Marca el campo de codigo segun tenga o no un EAN-13 coherente.
+ * Solo avisa: no bloquea, porque un codigo interno con letras es valido.
+ */
+function revisarCodigoBarras() {
+  const campo = $("#mp-codigo");
+  const nota = $("#mp-codigo-aviso");
+  if (!campo || !nota) return;
+  const c = campo.value.trim();
+  if (c === "" || codigoAceptable(c)) {
+    campo.classList.remove("mal-codigo");
+    nota.textContent = "";
+    return;
+  }
+  campo.classList.add("mal-codigo");
+  nota.textContent = "debería terminar en " + digitoVerificador(c);
+}
+
 async function guardarProducto() {
+  // El control del EAN-13 va tambien del lado del navegador: si el codigo esta
+  // mal, mejor decirlo al toque en vez de mandar y que lo rechace el servidor.
+  const codigo = $("#mp-codigo").value.trim();
+  if (!codigoAceptable(codigo)) {
+    $("#mp-codigo").focus();
+    aviso("El código " + codigo + " no es un EAN-13 válido. Debería terminar en "
+          + digitoVerificador(codigo) + ".", "mal");
+    return;
+  }
+
   const datos = {
     id: estado.editId || 0,
     nombre: $("#mp-nombre").value.trim(),
-    codigo: $("#mp-codigo").value.trim(),
+    codigo: codigo,
     categoria: $("#mp-categoria").value.trim(),
     precio: Number($("#mp-precio").value) || 0,
     costo: Number($("#mp-costo").value) || 0,

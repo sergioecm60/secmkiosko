@@ -277,6 +277,10 @@ main{flex:1; min-height:0; position:relative}
 }
 .campo textarea{height:auto; padding:10px 12px; resize:vertical; min-height:70px; font-family:inherit}
 .campo input:focus,.campo select:focus,.campo textarea:focus{border-color:var(--brand); background:var(--panel)}
+/* Código de barras con el dígito verificador que no cierra: el lector nunca
+   lo iba a encontrar, así que se marca mientras se tipea. Usa --bad, que ya
+   cambia solo con el tema oscuro. */
+.mal-codigo{border-color:var(--bad) !important; background:var(--badbg) !important}
 .rejilla{display:grid; gap:13px; grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr))}
 /* minmax(340px) hacia una columna de 340 minimos. En ventanas de 640 o menos
    eso ya no entra y la columna se sale del ancho disponible. Con min(100%)

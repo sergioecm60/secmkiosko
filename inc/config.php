@@ -239,6 +239,41 @@ function redondear($n): float
 }
 
 /**
+ * Dice si un codigo tiene sentido aceptarlo.
+ *
+ * Solo se aplica el control a los que parecen un EAN-13 de verdad (13 digitos).
+ * Un codigo interno con letras ("PAPA-001") o de otra longitud se deja pasar:
+ * hay negocios que identifican los productos asi.
+ *
+ * El ultimo digito del EAN-13 es un verificador: se calcula pesando los 12
+ * primeros de 1,3,1,3... y tiene que completar la decena. Un codigo mal
+ * tipeado casi siempre se detecta aca, y es justo el error que hace que un
+ * lector de barras no encuentre nunca el producto.
+ */
+function codigoAceptable(string $codigo): bool
+{
+    $codigo = trim($codigo);
+    if ($codigo === '') return true;                 // sin codigo: permitido
+    if (!preg_match('/^\d{13}$/', $codigo)) return true;  // no es EAN-13: permitido
+
+    $suma = 0;
+    for ($i = 0; $i < 12; $i++) {
+        $suma += ((int) $codigo[$i]) * ($i % 2 === 0 ? 1 : 3);
+    }
+    return ((10 - $suma % 10) % 10) === (int) $codigo[12];
+}
+
+/** Explicacion lista para mostrar cuando un EAN-13 no cierra. */
+function codigoMalExplicacion(string $codigo): string
+{
+    $suma = 0;
+    for ($i = 0; $i < 12; $i++) {
+        $suma += ((int) $codigo[$i]) * ($i % 2 === 0 ? 1 : 3);
+    }
+    return (string) ((10 - $suma % 10) % 10);
+}
+
+/**
  * Cantidades de carga rapida para la venta.
  * Si el producto define sus propios presets se usan esos; si no,
  * se sugiere un juego segun la unidad base (granel vs. por unidad).

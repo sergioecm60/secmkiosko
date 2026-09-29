@@ -89,6 +89,18 @@ switch ($accion) {
                 }
             }
 
+            // Digito verificador del EAN-13. Un codigo mal tipeado no lo
+            // encuentra ni el lector de barras, asi que mejor rechazarlo
+            // ahora que descubrirlo cuando el cliente esta esperando.
+            if (!codigoAceptable($codigo)) {
+                $deberia = codigoMalExplicacion($codigo);
+                salida([
+                    'ok'    => false,
+                    'error' => 'El código ' . $codigo . ' no es un EAN-13 válido: el último dígito tendría que ser '
+                               . $deberia . ', no ' . substr($codigo, -1) . '. Revisalo o dejalo vacío.',
+                ], 422);
+            }
+
             $bd->beginTransaction();
             try {
                 if ($id > 0) {

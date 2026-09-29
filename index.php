@@ -747,7 +747,7 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
         </div>
         <div class="rejilla mp-campos" style="flex:1;min-width:0;align-content:start">
           <div class="campo" style="grid-column:1/-1"><label>Nombre *</label><input id="mp-nombre" maxlength="60"></div>
-          <div class="campo"><label>Código / código de barras</label><input id="mp-codigo" maxlength="30" spellcheck="false"></div>
+          <div class="campo"><label>Código / código de barras <span class="fuente" id="mp-codigo-aviso"></span></label><input id="mp-codigo" maxlength="30" spellcheck="false"></div>
           <div class="campo"><label>Categoría</label><input id="mp-categoria" maxlength="25" list="lista-cat"></div>
           <datalist id="lista-cat"></datalist>
           <div class="campo"><label>Precio de venta * <span class="fuente" id="mp-precio-aviso"></span></label><input id="mp-precio" type="number" step="0.01" min="0"></div>

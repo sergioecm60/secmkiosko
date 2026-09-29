@@ -354,6 +354,15 @@ function conectar() {
   /* --- margen en vivo --- */
   ["#mp-precio", "#mp-costo"].forEach(s => $(s).addEventListener("input", refrescarMargen));
 
+  /* --- el codigo de barras se chequea mientras se tipea ---
+     Un EAN-13 mal tipeado no lo encuentra el lector, asi que conviene
+     avisar en el momento y no cuando el cliente esta esperando. */
+  const campoCodigo = $("#mp-codigo");
+  if (campoCodigo) {
+    campoCodigo.addEventListener("input", revisarCodigoBarras);
+    campoCodigo.addEventListener("blur", revisarCodigoBarras);
+  }
+
   /* --- formatos de compra y de venta --- */
   ["#ms-cant", "#ms-precio-compra"]
     .forEach(s => { const e = $(s); if (e) e.addEventListener("input", refrescarPreviewStock); });

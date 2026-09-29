@@ -56,6 +56,19 @@ con `dirname(__DIR__)`, no con `__DIR__`, justamente porque el archivo está un 
 abajo que `datos/`. Con `__DIR__` los respaldos se irían a escribir en `inc/datos` y
 `respaldo.php` mostraría la carpeta vacía.
 
+**El código de barras se valida al guardar.** Un EAN-13 lleva un dígito verificador: los
+12 primeros se pesan de 1,3,1,3... y el último tiene que completar la decena. El control vive
+en `codigoAceptable()` de `inc/config.php` y se aplica **sólo** a los códigos de 13 dígitos,
+así que un código interno con letras (`PAPA-001`) sigue entrando sin problema. Está en las
+tres capas: al tipear (`revisarCodigoBarras`, que pinta el campo), al guardar
+(`guardarProducto`) y en el servidor (`api/rutas/productos.php`, que responde 422). El del
+servidor es el que importa: es el único que no se puede esquivar.
+
+Esto no es un detalle menor. De una lista de 10 códigos de productos reales que nos pasó,
+**5 tenían mal el dígito verificador**. Con un código así, el producto se guarda, aparece en
+la grilla, se vende, y el lector de barras nunca lo encuentra: el error se descubre cuando el
+cliente está esperando y no cuando se tipeó el número.
+
 **`api.php` es sólo el enrutador.** Quedó en 822 líneas (antes 1950) y cada `case` delega
 con `require __DIR__ . '/api/rutas/<archivo>.php';`; las rutas abren su propio
 `switch ($accion)`. Para tocar, por ejemplo, el cobro, se edita `api/rutas/ventas.php` y no

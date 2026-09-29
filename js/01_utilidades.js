@@ -53,6 +53,31 @@ const esc = (s) => String(s == null ? "" : s)
 const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /**
+ * Ultimo digito de un EAN-13: el que tiene que completar la decena.
+ * Pesar los 12 primeros de 1,3,1,3... es el criterio de GS1.
+ */
+function digitoVerificador(codigo) {
+  const c = String(codigo || "");
+  if (!/^\d{13}$/.test(c)) return "";
+  let s = 0;
+  for (let i = 0; i < 12; i++) s += Number(c[i]) * (i % 2 === 0 ? 1 : 3);
+  return String((10 - s % 10) % 10);
+}
+
+/**
+ * Un EAN-13 de 13 digitos tiene que cerrar con su digito verificador.
+ * Los codigos internos con letras o de otra longitud se dejan pasar.
+ * El servidor aplica el mismo control (codigoAceptable en inc/config.php):
+ * esto es solo para avisar antes de mandar.
+ */
+function codigoAceptable(codigo) {
+  const c = String(codigo || "").trim();
+  if (c === "") return true;
+  if (!/^\d{13}$/.test(c)) return true;
+  return c[12] === digitoVerificador(c);
+}
+
+/**
  * Imprime SOLO el ticket indicado.
  * Hay tres contenedores (#ticket, #ticket-caja, #ticket-comanda) y los tres
  * tienen su propio bloque @media print. Si se dejara activo el de los demas,
