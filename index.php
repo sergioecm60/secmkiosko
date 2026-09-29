@@ -105,6 +105,7 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
         </div>
         <div class="barra-rapida">
           <button class="btn sm" id="btn-rapido" title="Cargar al vuelo algo que no está en el catálogo. Se cobra con su precio y no descuenta stock.">+ Producto rápido</button>
+          <button class="btn sm" id="btn-comanda" title="Anotar qué hay que preparar y sacarle el papel a la cocina. No cobra: eso va aparte, en el carrito.">🍳 Comanda de cocina</button>
           <span class="fuente">Venta espontánea: se cobra, no se controla stock</span>
         </div>
         <div class="chips" id="filtros"></div>
@@ -114,7 +115,6 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
         <div class="carrito-cab">
           <h2>🧾 Ticket <span class="pill" id="c-count">0</span></h2>
           <div class="filetools">
-            <button class="mini delivery" id="btn-delivery" title="Comanda para cocina (delivery, retiro o mesa)">🚚 Delivery</button>
             <button class="mini peligro" id="btn-vaciar">Vaciar</button>
           </div>
         </div>
@@ -125,15 +125,7 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
             <span>Descuento <span class="lapiz" title="Cambiar descuento">✎</span></span>
             <b id="c-desc">-$0.00</b>
           </div>
-          <div class="fila envio" id="c-envio" hidden>
-            <span>Envío</span><b id="c-envio-val">$0.00</b>
-          </div>
           <div class="fila total"><span>Total</span><b id="c-total">$0.00</b></div>
-          <div class="comanda-aviso" id="comanda-aviso" hidden>
-            <span>🍳 Comanda para <b id="comanda-cliente">—</b></span>
-            <button class="lapiz" id="btn-ver-comanda" title="Ver o editar la comanda">✎</button>
-            <button class="lapiz" id="btn-quitar-comanda" title="Quitar la comanda">✕</button>
-          </div>
           <button class="btn-cobrar" id="btn-cobrar" disabled>Cobrar</button>
         </div>
       </aside>
@@ -575,71 +567,79 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
   </section>
 </main>
 
-<!-- ================= MODAL DELIVERY / COMANDA ================= -->
-<div class="velo" id="m-delivery">
+<!-- ================= MODAL COMANDA (cocina) ================= -->
+<!--
+  La comanda es el papel para la cocina, no la venta. El cobro vive en el
+  carrito: acá sólo se anota qué hay que preparar y a quién se lo llevan. Por
+  eso el tipo arranca en "mesa" (consumo en el local) y los datos de
+  entrega son opcionales.
+-->
+<div class="velo" id="m-comanda">
   <div class="modal ancho">
     <div class="modal-cab">
-      <h2>🚚 Comanda para cocina</h2>
+      <h2>🍳 Comanda para cocina</h2>
       <button class="cerrar" data-cerrar>✕</button>
     </div>
     <div class="modal-cue">
 
-      <div class="campo"><label>¿Cómo es el pedido?</label>
-        <div class="segmentos" id="del-tipo">
-          <button class="on" data-tipo="delivery">🛵 Delivery</button>
-          <button data-tipo="retiro">🏠 Retiro</button>
-          <button data-tipo="mesa">🍽 Mesa</button>
+      <div class="campo"><label>¿Dónde se consume?</label>
+        <div class="segmentos" id="com-tipo">
+          <button class="on" data-tipo="mesa">🍽 En el local</button>
+          <button data-tipo="delivery">🛵 Delivery</button>
+          <button data-tipo="retiro">🏠 Para llevar</button>
         </div>
       </div>
 
       <div class="rejilla2 campos">
-        <div class="campo"><label>Nombre del cliente *</label>
-          <input id="del-cliente" placeholder="A quién se lo llevamos" autocomplete="off"></div>
-        <div class="campo"><label>Teléfono</label>
-          <input id="del-telefono" placeholder="11 1234-5678" autocomplete="off"></div>
+        <div class="campo"><label>Nombre (opcional)</label>
+          <input id="com-cliente" placeholder="Si no, va como Mostrador" autocomplete="off"></div>
+        <div class="campo"><label>Mesa o lugar (opcional)</label>
+          <input id="com-lugar" placeholder="Mesa 4, barra, mostrador…" autocomplete="off"></div>
       </div>
 
-      <div class="rejilla2 campos" id="del-zona-campos">
-        <div class="campo"><label>Zona</label>
-          <select id="del-zona"><option value="">— sin zona —</option></select></div>
+      <div class="rejilla2 campos" id="com-zona-campos" hidden>
+        <div class="campo"><label>Zona (opcional)</label>
+          <select id="com-zona"><option value="">— sin zona —</option></select></div>
         <div class="campo"><label>Costo del envío</label>
-          <input id="del-envio" type="text" value="$0.00" readonly tabindex="-1"></div>
+          <input id="com-envio" type="text" value="$0.00" readonly tabindex="-1"></div>
       </div>
 
-      <div class="campo" id="del-dir-campo"><label>Dirección</label>
-        <input id="del-direccion" placeholder="Calle, número, piso, referencia" autocomplete="off"></div>
-
-      <div class="campo" id="del-lugar-campo" hidden><label>¿Qué mesa?</label>
-        <input id="del-lugar" placeholder="Mesa 4, barra, mostrador…" autocomplete="off"></div>
+      <div class="campo" id="com-dir-campo" hidden><label>Dirección (opcional)</label>
+        <input id="com-direccion" placeholder="Calle, número, piso, referencia" autocomplete="off"></div>
 
       <div class="campo"><label>Notas para cocina</label>
-        <input id="del-notas" placeholder="Sin cebolla, todo bien cocido…" autocomplete="off"></div>
+        <input id="com-notas" placeholder="Sin cebolla, todo bien cocido…" autocomplete="off"></div>
 
       <hr class="sep">
 
       <div class="campo">
-        <label>Tocá los atajos. Los que tengan producto cargado también se cobran.</label>
-        <div class="atajos" id="del-atajos"></div>
+        <label>Atajos
+          <button class="btn sm" id="com-btn-nuevo-atajo" data-solo-admin hidden>+ Nuevo atajo</button>
+        </label>
+        <div class="atajos" id="com-atajos"></div>
       </div>
 
       <div class="campo">
         <label>O escribí algo a mano</label>
         <div class="fila-agregar">
-          <input id="del-texto" placeholder="Ej: 1 flan con dulce de leche" autocomplete="off">
-          <span class="det" id="del-detalle-wrap" hidden>
-            <input id="del-detalle" placeholder="detalle (opcional)" autocomplete="off"></span>
-          <button class="btn" id="del-agregar-texto">Agregar</button>
+          <input id="com-texto" placeholder="Ej: 6 huevos medio cocidos" autocomplete="off">
+          <span class="det" id="com-detalle-wrap" hidden>
+            <input id="com-detalle" placeholder="detalle (opcional)" autocomplete="off"></span>
+          <button class="btn" id="com-agregar-texto">Agregar</button>
         </div>
       </div>
 
       <div class="campo">
-        <label>Lo que hay que preparar <span class="pill" id="del-count">0</span></label>
-        <div class="del-items" id="del-items"></div>
+        <label>Lo que hay que preparar <span class="pill" id="com-count">0</span>
+          <button class="btn sm" id="com-traer-carrito" title="Copiar al carrito lo que ya está cargado, como líneas de cocina">↓ Traer del carrito</button>
+        </label>
+        <div class="del-items" id="com-items"></div>
       </div>
     </div>
     <div class="modal-pie">
       <button class="btn" data-cerrar>Cancelar</button>
-      <button class="btn pri" id="del-guardar">Guardar comanda y cobrar</button>
+      <button class="btn" id="com-imprimir" disabled title="Imprimir el papel para llevárselo a la cocina">🖨 Imprimir</button>
+      <button class="btn pri" id="com-guardar">Guardar comanda</button>
     </div>
   </div>
 </div>
@@ -652,9 +652,6 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
       <div class="cobrar-total">
         <div class="cap">Total a pagar</div>
         <div class="val" id="cob-total">$0.00</div>
-        <div class="cobrar-envio" id="cob-envio-fila" hidden>
-          Incluye envío por <b id="cob-envio-detalle">$0.00</b>
-        </div>
       </div>
       <div class="metodos" id="cob-metodos">
         <button class="metodo on" data-m="Efectivo"><span class="ic">💵</span>Efectivo</button>

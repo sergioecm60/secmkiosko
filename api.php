@@ -330,14 +330,36 @@ const ESTADOS_COMANDA = ['pendiente', 'preparando', 'listo', 'entregado', 'cance
  * Cada linea puede venir de un atajo con producto_id (esa ya se cobro como
  * parte del carrito) o ser solo texto para la cocina.
  */
-function guardarComanda(PDO $bd, array $d, int $ventaId, int $folio, float $total, string $usuario, float $envio = 0.0): int
+function guardarComanda(PDO $bd, array $d, ?int $ventaId, ?int $folio, float $total, string $usuario): int
 {
     $cliente = trim((string) ($d['cliente'] ?? ''));
+    // Para lo que se consume en el local no hace falta nombre: el papel va a
+    // la cocina, y con "Mostrador" alcanza para saber de quién es.
     if ($cliente === '') {
-        throw new RuntimeException('La comanda necesita el nombre del cliente.');
+        $cliente = 'Mostrador';
     }
-    $items = $d['items'] ?? [];
-    if (!is_array($items) || count($items) === 0) {
+    // Las lineas se limpian ANTES de insertar nada. Si se validara despues,
+    // una comanda sin items que preparar quedaria huérfana en el tablero de
+    // cocina, y el cajero veria un papel vacío que no puede borrar.
+    $items = [];
+    foreach (($d['items'] ?? []) as $it) {
+        if (!is_array($it)) {
+            continue;
+        }
+        $texto = trim((string) ($it['texto'] ?? ''));
+        if ($texto === '') {
+            continue;
+        }
+        $pid = entero($it['producto_id'] ?? 0);
+        $cant = redondear(numero($it['cantidad'] ?? 1));
+        $items[] = [
+            'producto_id' => $pid > 0 ? $pid : null,
+            'cantidad'    => $cant > 0 ? $cant : 1.0,
+            'texto'       => mb_substr($texto, 0, 160),
+            'detalle'     => trim((string) ($it['detalle'] ?? '')) ?: null,
+        ];
+    }
+    if (count($items) === 0) {
         throw new RuntimeException('La comanda no tiene nada que preparar.');
     }
 
@@ -384,27 +406,10 @@ function guardarComanda(PDO $bd, array $d, int $ventaId, int $folio, float $tota
          VALUES (?,?,?,?,?,?)'
     );
     foreach ($items as $it) {
-        if (!is_array($it)) {
-            continue;
-        }
-        $texto = trim((string) ($it['texto'] ?? ''));
-        if ($texto === '') {
-            continue;
-        }
-        $pid = entero($it['producto_id'] ?? 0);
-        $cant = redondear(numero($it['cantidad'] ?? 1));
-        if ($cant <= 0) {
-            $cant = 1.0;
-        }
-        $detalle = trim((string) ($it['detalle'] ?? ''));
-        $stIt->execute([$comandaId, $pid > 0 ? $pid : null, $cant,
-                        mb_substr($texto, 0, 160), $detalle ?: null, $pid > 0 ? 1 : 0]);
+        $stIt->execute([$comandaId, $it['producto_id'], $it['cantidad'],
+                        $it['texto'], $it['detalle'], $it['producto_id'] ? 1 : 0]);
     }
 
-    $n = (int) $bd->query('SELECT COUNT(*) FROM comanda_items WHERE comanda_id = ' . $comandaId)->fetchColumn();
-    if ($n === 0) {
-        throw new RuntimeException('La comanda no tiene nada que preparar.');
-    }
     return $comandaId;
 }
 
@@ -485,10 +490,12 @@ $permisos = [
     'cajas_mias'        => ROL_VENTA,
     'clave_cambiar'     => ROL_AUTENTICADO,
 
-    // Comandas: las ve y las mueve cualquiera (incluido el de cocina),
-    // pero crearlas es parte del cobro, asi que es ROL_VENTA.
+    // Comandas: las ve y las mueve cualquiera (incluido el de cocina).
+    // Crearlas ya no es parte del cobro: el cajero arma la comanda por su
+    // cuenta, asi que alcanza con que pueda vender.
     'comandas'          => ROL_AUTENTICADO,
     'comanda'           => ROL_AUTENTICADO,
+    'comanda_crear'     => ROL_VENTA,
     'comanda_estado'    => ROL_AUTENTICADO,
     'comanda_item'      => ROL_AUTENTICADO,
     'comanda_atajos'    => ROL_AUTENTICADO,
@@ -1258,7 +1265,7 @@ try {
                 // o queda el pedido pagado y su comanda, o no queda nada.
                 $comandaId = null;
                 if (is_array($datosComanda)) {
-                    $comandaId = guardarComanda($bd, $datosComanda, $ventaId, $folio, $total, $usuario, $envio);
+                    $comandaId = guardarComanda($bd, $datosComanda, $ventaId, $folio, $total, $usuario);
                 }
 
                 $bd->commit();
@@ -1818,6 +1825,14 @@ try {
             salida(['ok' => false, 'error' => 'Esa comanda ya no existe.'], 404);
         }
         salida(['ok' => true, 'comanda' => $c]);
+    }
+
+    case 'comanda_crear': {
+        // El cajero arma la comanda por su cuenta, sin cobrar nada: es el
+        // papel para la cocina, no la venta. El cobro va aparte, en el
+        // carrito, y sale su propio remito.
+        $id = guardarComanda($bd, cuerpo(), null, null, 0.0, nombreUsuario());
+        salida(['ok' => true, 'comanda' => comandaCompleta($bd, $id)]);
     }
 
     case 'comanda_estado': {

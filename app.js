@@ -261,7 +261,7 @@ const estado = {
   /* --- comandas de cocina --- */
   soyCocina: document.body.getAttribute("data-rol") === "cocina",
   miRol: document.body.getAttribute("data-rol") || "vendedor",
-  comanda: null,        // la comanda armada en el modal de delivery
+  esAdmin: document.body.getAttribute("data-rol") === "admin",
   atajos: [],
   zonas: [],
   cocFiltro: "pendiente",
@@ -430,8 +430,7 @@ function vaciarCarrito() {
 
 const subtotalCarrito = () => r2(estado.carrito.reduce((s, l) => s + l.precio * l.cantidad, 0));
 /** El costo de envío de la comanda se suma al total de la venta. */
-const envioComanda    = () => r2(estado.comanda && estado.comanda.tipo === "delivery" ? (estado.comanda.envio || 0) : 0);
-const totalCarrito    = () => r2(Math.max(0, subtotalCarrito() - estado.descuento) + envioComanda());
+const totalCarrito    = () => r2(Math.max(0, subtotalCarrito() - estado.descuento));
 // Piezas en unidad base, que es como se descuenta del stock.
 const piezasCarrito  = () => r2(estado.carrito.reduce((s, l) => s + l.cantidad * (l.factor || 1), 0));
 
@@ -467,19 +466,21 @@ function renderCarrito() {
 
   const sub = subtotalCarrito();
   const tot = totalCarrito();
-  const env = envioComanda();
   $("#c-count").textContent = estado.carrito.length;
   $("#c-sub").textContent = dinero(sub);
   $("#c-total").textContent = dinero(tot);
   $("#fila-desc").style.display = estado.descuento > 0 ? "" : "none";
-  $("#c-desc").textContent = "−" + dinero(estado.descuento);
-  const filaEnv = $("#c-envio");
-  if (filaEnv) {
-    filaEnv.hidden = env <= 0;
-    if (env > 0) $("#c-envio-val").textContent = "+" + dinero(env);
-  }
+  $("#c-desc").textContent = "-" + dinero(estado.descuento);
   renderBotonCobrar();
 }
+
+/** El botón de cobrar se enciende con el carrito. Nada más lo controla:
+ *  la comanda ya no viaja con la venta. */
+function renderBotonCobrar() {
+  const btn = $("#btn-cobrar");
+  if (btn) btn.disabled = estado.carrito.length === 0;
+}
+
 
 /* =====================================================================
    5. PUNTO DE VENTA
@@ -601,15 +602,6 @@ function refrescarCobro() {
   const efectivo = metodo ? !!metodo.efectivo : true;
   $("#cob-efectivo").style.display = efectivo ? "" : "none";
   $("#cob-otro").style.display = efectivo ? "none" : "";
-  const env = envioComanda();
-  const filaEnv = $("#cob-envio-fila");
-  if (filaEnv) {
-    filaEnv.hidden = env <= 0;
-    if (env > 0) {
-      const z = estado.zonas.find(x => x.id === (estado.comanda.zona_id || 0));
-      $("#cob-envio-detalle").textContent = dinero(env) + (z ? " · " + z.nombre : "");
-    }
-  }
   if (!efectivo) { $("#cob-confirmar").disabled = false; return; }
 
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
@@ -646,19 +638,8 @@ async function confirmarVenta() {
   const efectivo = metodo ? !!metodo.efectivo : true;
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
 
-  // La comanda viaja con la venta: se guardan juntas o no se guarda ninguna.
-  let comanda = null;
-  if (estado.comanda && estado.comanda.items.length) {
-    const c = estado.comanda;
-    comanda = {
-      cliente: c.cliente, telefono: c.telefono, direccion: c.direccion,
-      zona_id: c.zona_id || 0, tipo: c.tipo, lugar: c.lugar, notas: c.notas,
-      items: c.items.map(it => ({
-        texto: it.texto, detalle: it.detalle, producto_id: it.producto_id || 0, cantidad: it.cantidad
-      }))
-    };
-  }
-
+  // La comanda NO viaja con la venta: ya se guardó sola, con su propio
+  // botón. Acá sólo se cobra el carrito.
   try {
     const r = await api("venta_crear", {
       items: itemsParaVenta(),
@@ -667,21 +648,16 @@ async function confirmarVenta() {
       medio_pago_id: metodo ? metodo.id : 0,
       recibido: efectivo ? recibido : -1,
       vuelto: efectivo ? r2(recibido - totalCarrito()) : 0,
-      referencia: $("#cob-ref").value.trim(),
-      comanda: comanda
+      referencia: $("#cob-ref").value.trim()
     });
 
     cerrarModal("#m-cobro");
     vaciarCarrito();
-    estado.comanda = null;
     renderBotonCobrar();
     estado.ultimaVenta = r.venta;
 
     if (r.sin_stock && r.sin_stock.length) {
       aviso("⚠️ Quedó en negativo: " + r.sin_stock.join(", "), "aviso-w");
-    }
-    if (r.comanda_id) {
-      aviso("Comanda #" + r.comanda_id + " enviada a cocina.", "ok");
     }
 
     mostrarVenta(r.venta, true);
@@ -698,52 +674,62 @@ async function confirmarVenta() {
 
 /* =====================================================================
    6b. COMANDAS DE COCINA
-   El pedido se cobra como una venta normal y ademas queda la comanda:
-   lo que cocina tiene que preparar y a quien entregarselo.
+   La comanda es el papel para la cocina y va SEPARADA del cobro: el cajero
+   carga los productos y cobra en el carrito (de ahi sale el remito), y aparte
+   saca la comanda con lo que hay que preparar. Para consumo en el local no
+   hay que completar nada: el tipo arranca en "En el local" y los datos de
+   entrega son opcionales.
    ===================================================================== */
-const ETIQUETA_TIPO = { delivery: "🛵 Delivery", retiro: "🏠 Retiro", mesa: "🍽 Mesa" };
+const ETIQUETA_TIPO = { delivery: "🛵 Delivery", retiro: "🏠 Para llevar", mesa: "🍽 En el local" };
 const ETIQUETA_ESTADO = {
   pendiente: "Nueva", preparando: "Preparando", listo: "Lista",
   entregado: "Entregada", cancelado: "Cancelada"
 };
 
-/* ---------- Modal de delivery ---------- */
+/* ---------- Comanda de cocina (el papel, no la venta) ---------- */
 
-function abrirDelivery() {
-  if (!estado.comanda) {
-    estado.comanda = {
-      cliente: "", telefono: "", direccion: "", zona_id: 0, envio: 0,
-      tipo: "delivery", lugar: "", notas: "", items: []
+/** La comanda que se está armando. Vive en memoria hasta que se guarda. */
+let comandaEnCurso = null;
+
+/** La última comanda guardada, para poder sacarle otra copia de inmediato. */
+let ultimaComanda = null;
+
+function abrirComanda() {
+  if (!comandaEnCurso) {
+    comandaEnCurso = {
+      cliente: "", direccion: "", zona_id: 0, envio: 0,
+      tipo: "mesa", lugar: "", notas: "", items: []
     };
   }
-  const c = estado.comanda;
-  $("#del-cliente").value = c.cliente || "";
-  $("#del-telefono").value = c.telefono || "";
-  $("#del-direccion").value = c.direccion || "";
-  $("#del-lugar").value = c.lugar || "";
-  $("#del-notas").value = c.notas || "";
-  $("#del-texto").value = "";
-  $("#del-detalle").value = "";
-  $$("#del-tipo button").forEach(b => b.classList.toggle("on", b.dataset.tipo === c.tipo));
-  actualizarCamposDelivery();
+  const c = comandaEnCurso;
+  $("#com-cliente").value = c.cliente || "";
+  $("#com-lugar").value = c.lugar || "";
+  $("#com-direccion").value = c.direccion || "";
+  $("#com-notas").value = c.notas || "";
+  $("#com-texto").value = "";
+  $("#com-detalle").value = "";
+  $("#com-detalle-wrap").hidden = true;
+  $$("#com-tipo button").forEach(b => b.classList.toggle("on", b.dataset.tipo === c.tipo));
+  actualizarCamposComanda();
   renderZonas();
   renderAtajos();
-  renderItemsDelivery();
-  abrirModal("#m-delivery");
-  setTimeout(() => $("#del-cliente").focus(), 120);
+  renderItemsComanda();
+  // Si ya se guardó alguna comanda en esta sesión, se puede sacar otra copia
+  // sin volver a armarla.
+  $("#com-imprimir").disabled = !ultimaComanda;
+  abrirModal("#m-comanda");
 }
 
 /** Muestra sólo los campos que aplican al tipo de pedido elegido. */
-function actualizarCamposDelivery() {
-  const t = estado.comanda.tipo;
-  $("#del-zona-campos").style.display = t === "delivery" ? "" : "none";
-  $("#del-dir-campo").style.display = t === "delivery" ? "" : "none";
-  $("#del-lugar-campo").style.display = t === "mesa" ? "" : "none";
+function actualizarCamposComanda() {
+  const t = comandaEnCurso.tipo;
+  $("#com-zona-campos").hidden = t !== "delivery";
+  $("#com-dir-campo").hidden = t !== "delivery";
 }
 
 function renderZonas() {
-  const sel = $("#del-zona");
-  const id = String(estado.comanda.zona_id || 0);
+  const sel = $("#com-zona");
+  const id = String(comandaEnCurso.zona_id || 0);
   sel.innerHTML = '<option value="0">— sin zona —</option>'
     + estado.zonas.map(z => '<option value="' + z.id + '">' + esc(z.nombre) + " — " + dinero(z.costo) + "</option>").join("");
   sel.value = id;
@@ -752,32 +738,25 @@ function renderZonas() {
 
 /** El costo sale de la zona configurada; el navegador no lo puede cambiar. */
 function aplicarZona() {
-  const c = estado.comanda;
-  const id = Number($("#del-zona").value) || 0;
+  const c = comandaEnCurso;
+  const id = Number($("#com-zona").value) || 0;
   c.zona_id = id;
   const z = estado.zonas.find(x => x.id === id);
-  const costo = z ? Number(z.costo) || 0 : 0;
-  c.envio = costo;
-  $("#del-envio").value = dinero(z ? costo : 0);
-  // El total del ticket incluye el envio: hay que repintarlo.
-  renderCarrito();
-}
-
-/** Cambiar el tipo puede dejar el envio en cero (retiro y mesa no se reparten). */
-function refrescarEnvio() {
-  const c = estado.comanda;
-  // Se relee el costo de la zona: si veniamos de retiro, el valor sigue ahi.
-  const z = estado.zonas.find(x => x.id === (c.zona_id || 0));
+  // El envío de la comanda es sólo informativo: el cobro va aparte.
   c.envio = c.tipo === "delivery" && z ? Number(z.costo) || 0 : 0;
-  $("#del-envio").value = dinero(c.envio);
-  renderCarrito();
+  $("#com-envio").value = dinero(c.envio);
 }
 
 /* ---------- Atajos ---------- */
 
 function renderAtajos() {
+  // Crear y editar atajos es del administrador; el cajero sólo los usa.
+  const btnNuevo = $("#com-btn-nuevo-atajo");
+  if (btnNuevo) btnNuevo.hidden = !estado.esAdmin;
   if (!estado.atajos.length) {
-    $("#del-atajos").innerHTML = '<p class="parrafo" style="margin:0">No hay atajos cargados. Cargalos en Ajustes → Comandas de cocina.</p>';
+    $("#com-atajos").innerHTML = estado.esAdmin
+      ? '<p class="parrafo" style="margin:0">No hay atajos cargados. Usá "+ Nuevo atajo".</p>'
+      : '<p class="parrafo" style="margin:0">No hay atajos cargados.</p>';
     return;
   }
   // Se agrupan por sección, en el orden en que vinieron.
@@ -786,101 +765,159 @@ function renderAtajos() {
     if (!secciones.some(s => s.nombre === a.seccion)) secciones.push({ nombre: a.seccion, lista: [] });
     secciones.find(s => s.nombre === a.seccion).lista.push(a);
   });
-  $("#del-atajos").innerHTML = secciones.map(s => `
+  $("#com-atajos").innerHTML = secciones.map(s => `
     <div class="atajo-sec"><span class="t">${esc(s.nombre)}</span><span class="ln"></span></div>
     <div class="atajo-botones">${s.lista.map(a => `
-      <button class="atajo${a.producto_id ? " con-producto" : ""}" data-atajo="${a.id}"
-              title="${esc(a.texto || "")}${a.producto_id ? " · se cobra" : " · sólo texto"}">
-        ${esc(a.etiqueta)}${a.producto_id ? '<span class="pt">$</span>' : ""}
-      </button>`).join("")}</div>`).join("");
+      <span class="atajo-grupo">
+        <button class="atajo" data-atajo="${a.id}"
+                title="${esc(a.texto || "")}${a.detalle ? " · " + esc(a.detalle) : ""}">
+          ${esc(a.etiqueta)}
+        </button>
+        ${estado.esAdmin ? `<button class="atajo-ed" data-editar-atajo="${a.id}"
+                title="Editar este atajo">✎</button>` : ""}
+      </span>`).join("")}</div>`).join("");
 }
 
 /**
- * Un atajo con producto lo mete al carrito (se cobra y descuenta stock) y
- * además anota la línea para cocina. Uno sin producto es sólo texto.
+ * Un atajo agrega una línea a la comanda y nada más. No toca el carrito: el
+ * cobro es otro paso, así que meter un producto acá cobraría de más.
  */
 function usarAtajo(id) {
   const a = estado.atajos.find(x => x.id === Number(id));
   if (!a) return;
   let texto = a.texto;
-  let detalle = a.detalle || null;
-
-  if (a.producto_id) {
+  if (!texto && a.producto_id) {
     const p = prodPorId(a.producto_id);
-    if (!p) { aviso("El producto de ese atajo ya no existe.", "mal"); return; }
-    // Formato puntual (por ejemplo "botella de 2 y cuarto"): si existe, se usa.
-    let fmtId = 0;
-    if (a.formato_unidad) {
-      const f = (p.formatos_venta || []).find(x => norm(x.unidad) === norm(a.formato_unidad));
-      if (f) fmtId = f.id;
-    }
-    agregar(a.producto_id, 1, fmtId);
-    if (!texto) texto = p.nombre;
+    texto = p ? p.nombre : "";
   }
-  if (!texto) { aviso("Ese atajo no tiene texto para cocina.", "mal"); return; }
-
-  agregarItemComanda({ texto, detalle, producto_id: a.producto_id || 0, cantidad: 1 });
-  $("#del-texto").value = "";
-  $("#del-detalle").value = "";
-  $("#del-detalle-wrap").hidden = true;
+  if (!texto) { aviso("Ese atajo no tiene texto para la comanda.", "mal"); return; }
+  agregarItemComanda({
+    texto, detalle: a.detalle || null,
+    producto_id: a.producto_id || 0, cantidad: 1
+  });
 }
 
 function agregarItemComanda(item) {
-  estado.comanda.items.push({
-    texto: item.texto, detalle: item.detalle || null,
-    producto_id: item.producto_id || 0, cantidad: Number(item.cantidad) || 1
-  });
-  renderItemsDelivery();
+  if (!comandaEnCurso) return;
+  // Si la línea ya está anotada se acumula en vez de repetirla: dos "6
+  // huevos" son una línea con cantidad 2, no dos renglones en el papel.
+  // norm() pasa a minúsculas pero NO saca los espacios de los bordes, así
+  // que acá se limpian: "6 HUEVOS " y " 6 huevos" son la misma línea.
+  const clave = s => norm(s == null ? "" : String(s)).trim().replace(/\s+/g, " ");
+  const igual = comandaEnCurso.items.find(it =>
+    (it.producto_id || 0) === (item.producto_id || 0)
+    && clave(it.texto) === clave(item.texto)
+    && clave(it.detalle || "") === clave(item.detalle || ""));
+  if (igual) {
+    igual.cantidad = (Number(igual.cantidad) || 0) + (Number(item.cantidad) || 1);
+  } else {
+    comandaEnCurso.items.push({
+      texto: item.texto, detalle: item.detalle || null,
+      producto_id: item.producto_id || 0, cantidad: Number(item.cantidad) || 1
+    });
+  }
+  renderItemsComanda();
 }
 
 /* ---------- Lineas de la comanda ---------- */
 
-function renderItemsDelivery() {
-  const items = estado.comanda.items;
-  $("#del-count").textContent = items.length;
-  $("#del-guardar").disabled = items.length === 0;
+function renderItemsComanda() {
+  const items = comandaEnCurso ? comandaEnCurso.items : [];
+  $("#com-count").textContent = items.length;
+  $("#com-guardar").disabled = items.length === 0;
   if (!items.length) {
-    $("#del-items").innerHTML = '<div class="del-vacio">Todavía no hay nada que preparar.<br>Tocá un atajo de arriba o escribí una línea.</div>';
+    $("#com-items").innerHTML = '<div class="del-vacio">Todavía no hay nada que preparar.<br>'
+      + 'Traé el pedido del carrito, tocá un atajo o escribí una línea.</div>';
     return;
   }
-  $("#del-items").innerHTML = items.map((it, i) => {
-    // Si el atajo tira de un producto, se muestra cuanto suma al ticket.
-    let precio = "";
-    if (it.producto_id) {
-      const linea = estado.carrito.find(l => l.id === it.producto_id);
-      if (linea) precio = dinero(linea.precio * linea.cantidad);
-    }
-    return `<div class="del-item">
+  $("#com-items").innerHTML = items.map((it, i) => `
+    <div class="del-item">
       <span class="n">${it.cantidad}</span>
       <span class="c"><b>${esc(it.texto)}</b>${it.detalle ? '<span class="d">' + esc(it.detalle) + "</span>" : ""}</span>
-      <span class="precio">${precio}</span>
       <button class="quitar" data-quitar-com="${i}" title="Sacar de la comanda">✕</button>
-    </div>`;
-  }).join("");
+    </div>`).join("");
 }
 
-/** El botón de cobrar se enciende con el carrito: la comanda viaja con la venta. */
-function renderBotonCobrar() {
-  const hayCarrito = estado.carrito.length > 0;
-  const hayComanda = !!(estado.comanda && estado.comanda.items.length);
-  const btn = $("#btn-cobrar");
-  if (btn) btn.disabled = !hayCarrito;
-  const av = $("#comanda-aviso");
-  if (av) {
-    av.hidden = !hayComanda;
-    if (hayComanda) $("#comanda-cliente").textContent = estado.comanda.cliente || "(sin nombre)";
+/** Escribe una línea a mano para la comanda. */
+function agregarTextoComanda() {
+  const texto = $("#com-texto").value.trim();
+  if (!texto) return;
+  agregarItemComanda({
+    texto, detalle: $("#com-detalle").value.trim(),
+    producto_id: 0, cantidad: 1
+  });
+  $("#com-texto").value = "";
+  $("#com-detalle").value = "";
+  $("#com-detalle-wrap").hidden = true;
+  $("#com-texto").focus();
+}
+
+/** Trae el carrito a la comanda: es lo que el cajero ya está por cobrar. */
+function traerCarritoAComanda() {
+  if (!comandaEnCurso) return;
+  if (!estado.carrito.length) {
+    aviso("El carrito está vacío: cargá algo antes de armar la comanda.", "aviso-w");
+    return;
   }
+  estado.carrito.forEach(l => {
+    agregarItemComanda({
+      texto: l.formato_unidad ? l.nombre + " (" + l.formato_unidad + ")" : l.nombre,
+      detalle: null,
+      producto_id: l.id,
+      cantidad: Number(l.cantidad) || 1
+    });
+  });
+  aviso("Se pasó el carrito a la comanda.", "ok");
 }
 
-function leerCamposDelivery() {
-  const c = estado.comanda;
-  c.cliente  = $("#del-cliente").value.trim();
-  c.telefono = $("#del-telefono").value.trim();
-  c.direccion = $("#del-direccion").value.trim();
-  c.lugar    = $("#del-lugar").value.trim();
-  c.notas    = $("#del-notas").value.trim();
+/* ---------- Guardar e imprimir ---------- */
+
+function leerCamposComanda() {
+  const c = comandaEnCurso;
+  c.cliente   = $("#com-cliente").value.trim();
+  c.lugar     = $("#com-lugar").value.trim();
+  c.direccion = $("#com-direccion").value.trim();
+  c.notas     = $("#com-notas").value.trim();
 }
 
+/** Guarda la comanda sola: no cobra nada. El remito sale del carrito. */
+function guardarComanda() {
+  if (!comandaEnCurso) { aviso("No hay ninguna comanda armada.", "mal"); return; }
+  leerCamposComanda();
+  const c = comandaEnCurso;
+  if (!c.items.length) {
+    aviso("Anotá al menos una cosa para preparar.", "mal");
+    return;
+  }
+  api("comanda_crear", {
+    tipo: c.tipo, cliente: c.cliente, lugar: c.lugar,
+    direccion: c.direccion, zona_id: c.zona_id || 0, notas: c.notas,
+    items: c.items.map(it => ({
+      texto: it.texto, detalle: it.detalle,
+      producto_id: it.producto_id || 0, cantidad: it.cantidad
+    }))
+  }).then(r => {
+    ultimaComanda = r.comanda;
+    // Ya quedó en la base: si el cajero sigue cargando, arranca otra.
+    comandaEnCurso = null;
+    cerrarModal("#m-comanda");
+    $("#com-imprimir").disabled = false;
+    // El cajero se la lleva a la cocina: lo natural es printable ahí mismo.
+    if (ultimaComanda) {
+      confirmar(
+        "Comanda #" + r.comanda.id + " guardada",
+        "¿La imprimís ahora para llevársela a la cocina? Si no, la sacás "
+        + "de nuevo desde el botón Imprimir."
+      ).then(ok => { if (ok) imprimirComanda(r.comanda.id); });
+    }
+  }).catch(e => aviso(e.message, "mal"));
+}
+
+/** Imprime el papel de la última comanda guardada, sin volver a armarlo. */
+function imprimirUltimaComanda() {
+  if (!ultimaComanda) { aviso("Todavía no guardaste ninguna comanda.", "mal"); return; }
+  imprimirComanda(ultimaComanda.id);
+}
 /** El precio de la comanda de texto libre no se cobra: es sólo instrucción. */
 function itemsParaVenta() {
   return estado.carrito.map(l => ({
@@ -2929,7 +2966,7 @@ async function guardarAtajo() {
     await api("atajo_guardar", datos);
     cerrarModal("#m-atajo");
     await cargarAjustesCocina();
-    if (estado.comanda) renderAtajos();
+    if (estado.atajos.length) renderAtajos();
     aviso("Atajo guardado.", "ok");
   } catch (e) { aviso(e.message, "mal"); }
 }
@@ -3134,84 +3171,55 @@ function conectar() {
 
   $("#btn-cobrar").addEventListener("click", abrirCobro);
 
-  /* --- delivery / comanda --- */
-  escuchar("#btn-delivery", "click", abrirDelivery);
+  /* --- comanda de cocina --- */
+  escuchar("#btn-comanda", "click", abrirComanda);
 
-  escuchar("#del-tipo", "click", e => {
+  escuchar("#com-tipo", "click", e => {
     const b = e.target.closest("button[data-tipo]");
     if (!b) return;
-    estado.comanda.tipo = b.dataset.tipo;
-    $$("#del-tipo button").forEach(x => x.classList.toggle("on", x === b));
-    actualizarCamposDelivery();
-    refrescarEnvio();
+    comandaEnCurso.tipo = b.dataset.tipo;
+    $$("#com-tipo button").forEach(x => x.classList.toggle("on", x === b));
+    actualizarCamposComanda();
+    aplicarZona();
   });
 
-  escuchar("#del-zona", "change", aplicarZona);
+  escuchar("#com-zona", "change", aplicarZona);
 
-  escuchar("#del-atajos", "click", e => {
+  escuchar("#com-atajos", "click", e => {
+    // El lápiz edita; el resto del botón usa el atajo. Chocarían si no.
+    const ed = e.target.closest("[data-editar-atajo]");
+    if (ed) { abrirAtajo(Number(ed.dataset.editarAtajo)); return; }
     const b = e.target.closest("[data-atajo]");
     if (!b) return;
     usarAtajo(b.dataset.atajo);
   });
 
-  escuchar("#del-texto", "input", e => {
+  escuchar("#com-btn-nuevo-atajo", "click", () => abrirAtajo(0));
+
+  escuchar("#com-texto", "input", e => {
     // El detalle aparece sólo cuando hay algo que detallar.
-    $("#del-detalle-wrap").hidden = !e.target.value.trim();
+    $("#com-detalle-wrap").hidden = !e.target.value.trim();
   });
 
-  escuchar("#del-texto", "keydown", e => {
+  escuchar("#com-texto", "keydown", e => {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    agregarItemComanda({
-      texto: e.target.value.trim(),
-      detalle: $("#del-detalle").value.trim(),
-      producto_id: 0, cantidad: 1
-    });
-    e.target.value = "";
-    $("#del-detalle").value = "";
-    $("#del-detalle-wrap").hidden = true;
+    agregarTextoComanda();
   });
 
-  escuchar("#del-items", "click", e => {
+  escuchar("#com-agregar-texto", "click", agregarTextoComanda);
+
+  escuchar("#com-traer-carrito", "click", traerCarritoAComanda);
+
+  escuchar("#com-items", "click", e => {
     const b = e.target.closest("[data-quitar-com]");
     if (!b) return;
-    estado.comanda.items.splice(Number(b.dataset.quitarCom), 1);
-    renderItemsDelivery();
+    comandaEnCurso.items.splice(Number(b.dataset.quitarCom), 1);
+    renderItemsComanda();
   });
 
-  escuchar("#del-guardar", "click", () => {
-    leerCamposDelivery();
-    if (!estado.comanda.cliente) {
-      aviso("Poné el nombre del cliente.", "mal");
-      $("#del-cliente").focus();
-      return;
-    }
-    if (estado.comanda.tipo === "delivery" && !estado.comanda.direccion) {
-      aviso("Falta la dirección de entrega.", "mal");
-      $("#del-direccion").focus();
-      return;
-    }
-    if (estado.comanda.tipo === "mesa" && !estado.comanda.lugar) {
-      aviso("¿Qué mesa o lugar es?", "mal");
-      $("#del-lugar").focus();
-      return;
-    }
-    cerrarModal("#m-delivery");
-    renderBotonCobrar();
-    if (!estado.carrito.length) {
-      aviso("Esa comanda es sólo texto: agregá algún producto al ticket para poder cobrarla.", "aviso-w");
-      return;
-    }
-    abrirCobro();
-  });
-
-  /* --- delivery: ver o sacar la comanda armada --- */
-  escuchar("#btn-ver-comanda", "click", abrirDelivery);
-  escuchar("#btn-quitar-comanda", "click", () => {
-    estado.comanda = null;
-    renderCarrito();
-    aviso("Comanda quitada del ticket.");
-  });
+  escuchar("#com-guardar", "click", guardarComanda);
+  escuchar("#com-imprimir", "click", imprimirUltimaComanda);
 
   /* --- tablero de cocina --- */
   escuchar("#coc-filtros", "click", e => {
@@ -3249,19 +3257,27 @@ function conectar() {
     const ed = e.target.closest("[data-edit-atajo]");
     const bo = e.target.closest("[data-borrar-atajo]");
     if (ed) abrirAtajo(Number(ed.dataset.editAtajo));
-    if (bo) await confirmar("Borrar el atajo", "Se pierde el botón, no los productos.", async () => {
-      await api("atajo_borrar", { id: Number(bo.dataset.borrarAtajo) });
-      await cargarAjustesCocina();
-    });
+    if (bo) {
+      if (await confirmar("Borrar el atajo", "Se pierde el botón, no los productos.")) {
+        try {
+          await api("atajo_borrar", { id: Number(bo.dataset.borrarAtajo) });
+          await cargarAjustesCocina();
+        } catch (ex) { aviso(ex.message, "mal"); }
+      }
+    }
   });
   escuchar("#zonas-tb", "click", async e => {
     const ed = e.target.closest("[data-edit-zona]");
     const bo = e.target.closest("[data-borrar-zona]");
     if (ed) abrirZona(Number(ed.dataset.editZona));
-    if (bo) await confirmar("Borrar la zona", "Las comandas viejas guardan el nombre.", async () => {
-      await api("zona_borrar", { id: Number(bo.dataset.borrarZona) });
-      await cargarAjustesCocina();
-    });
+    if (bo) {
+      if (await confirmar("Borrar la zona", "Las comandas viejas guardan el nombre.")) {
+        try {
+          await api("zona_borrar", { id: Number(bo.dataset.borrarZona) });
+          await cargarAjustesCocina();
+        } catch (ex) { aviso(ex.message, "mal"); }
+      }
+    }
   });
   escuchar("#atk-producto", "change", refrescarFormatosAtajo);
   escuchar("#atk-guardar", "click", guardarAtajo);

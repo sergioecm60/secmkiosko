@@ -1,6 +1,6 @@
 # secmkiosko
 
-Sistema de punto de venta, delivery y control de existencias para kiosco y almacén.
+Sistema de punto de venta, comandas de cocina y control de existencias para kiosco y almacén.
 Corre íntegramente en una PC con Windows, **sin internet y sin servicios en la nube**.
 
 ![PHP](https://img.shields.io/badge/PHP-8.1%2B-777BB4) ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1) ![nginx](https://img.shields.io/badge/servidor-nginx-009639) ![Licencia](https://img.shields.io/badge/licencia-MIT-green)
@@ -15,12 +15,17 @@ Corre íntegramente en una PC con Windows, **sin internet y sin servicios en la 
   momento) se carga con su precio y queda en el catálogo. Va marcado **sin control de stock**,
   así que no descuenta existencias, no genera kardex y no aparece en los avisos ni en la
   valuación de inventario. Si el nombre ya existe, actualiza el precio en vez de duplicarlo.
-- **Delivery, retiro y mesa**: el pedido se cobra como una venta normal y además genera una
-  **comanda de cocina** con el mismo número de folio. Se guarda todo en una sola transacción:
-  o queda el pedido pagado y su comanda, o no queda nada.
+- **Comanda de cocina, separada del cobro**: la comanda es el papel con lo que hay que
+  preparar, no la venta. El cajero carga los productos y cobra en el carrito (de ahí sale el
+  remito), y aparte saca la comanda desde el botón que está al lado de *Producto rápido*:
+  copia el carrito, suma atajos o escribe líneas a mano, y la imprime para llevársela a la
+  cocina. Para lo que se consume en el local no hay que completar nada: el tipo arranca en
+  *En el local* y nombre, mesa, zona y dirección son opcionales. La comanda no se ata a una
+  venta ni fuerza a cobrar.
 - **Cocina (KDS)**: tablero de pedidos con estados (nueva, preparando, lista, entregada),
   tiempo transcurrido y cuenta de cuántos hay en cada estado. Atajos de comanda para los
-  productos que siempre se piden.
+  productos que siempre se piden: el administrador los crea y los edita con el lápiz desde
+  el propio panel de la comanda, y el vendedor sólo los usa.
 - **Roles y permisos**: administrador, vendedor y cocina. Cada rol ve y toca lo que le
   corresponde; la cocina no cobra y el vendedor no entra a ajustes.
 - **Costo de compra y margen** por producto. El costo se congela al vender, así el
@@ -182,7 +187,7 @@ solos, así que no hace falta tocar la base a mano.
 | `usuarios` | Usuarios, roles y estado |
 | `cajas` | Apertura y cierre de caja por usuario |
 | `caja_cierre_metodos` | Conteo declarado por medio de pago al cerrar la caja |
-| `comandas` | Pedidos de delivery, retiro o mesa |
+| `comandas` | Comandas de cocina (en el local, para llevar o delivery) |
 | `comanda_items` | Ítems de cada comanda |
 | `comanda_atajos` | Atajos de comanda (los productos de siempre) |
 | `zonas` | Zonas de reparto con precio de envío |
