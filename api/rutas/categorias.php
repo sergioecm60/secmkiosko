@@ -4,6 +4,7 @@ case 'categorias': {
         $st = $bd->query('SELECT * FROM categorias WHERE activo = 1 ORDER BY orden, nombre');
         salida(['ok' => true, 'categorias' => array_map(fn($c) => [
             'id' => (int) $c['id'], 'nombre' => $c['nombre'], 'orden' => (int) $c['orden'],
+            'cocina' => (int) $c['cocina'],
         ], $st->fetchAll())]);
     }
 
@@ -34,11 +35,11 @@ case 'categoria_guardar': {
                 $mover = $bd->prepare('UPDATE productos SET categoria = ? WHERE categoria = ? COLLATE utf8mb4_unicode_ci');
                 $mover->execute([$nombre, $anterior]);
             }
-            $st = $bd->prepare('UPDATE categorias SET nombre=?, orden=? WHERE id=?');
-            $st->execute([$nombre, pInt('orden'), $id]);
+            $st = $bd->prepare('UPDATE categorias SET nombre=?, orden=?, cocina=? WHERE id=?');
+            $st->execute([$nombre, pInt('orden'), p('cocina', 0) ? 1 : 0, $id]);
         } else {
-            $st = $bd->prepare('INSERT INTO categorias (nombre, orden, activo) VALUES (?,?,1)');
-            $st->execute([$nombre, pInt('orden')]);
+            $st = $bd->prepare('INSERT INTO categorias (nombre, orden, cocina, activo) VALUES (?,?,?,1)');
+            $st->execute([$nombre, pInt('orden'), p('cocina', 0) ? 1 : 0]);
             $id = (int) $bd->lastInsertId();
         }
         salida(['ok' => true, 'id' => $id]);

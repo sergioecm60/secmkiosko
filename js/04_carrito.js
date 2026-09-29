@@ -31,11 +31,15 @@ function agregar(id, cantidad, formatoId) {
   }
 
   // Una linea por producto + formato: "2 unidades" y "1 docena" van separadas.
+  // El destino a cocina se decide aca y queda pegado a la linea: si el cajero
+  // apaga la Cocina de 600 ml porque la saca del mostrador, y despues agrega
+  // otra Coca, la nueva linea no lo pisa.
   const linea = estado.carrito.find(l => l.id === p.id && (l.formato_id || 0) === formatoIdFinal);
   if (linea) linea.cantidad = r2(linea.cantidad + cantidad);
   else estado.carrito.push({
     id: p.id, formato_id: formatoIdFinal, nombre: p.nombre, precio,
     cantidad: r2(cantidad), factor,
+    cocina: esCategoriaCocina(p.categoria),
     unidad: p.unidad || "pieza",
     formato: fmt ? fmt.unidad : null,
     // Se mandan tambien nombre y cantidad: si el producto se guarda y cambia
@@ -57,6 +61,20 @@ function cambiarCantidad(id, delta, formatoId) {
   l.cantidad = r2(l.cantidad + delta);
   if (l.cantidad <= 0) quitarLinea(l.id, fId);
   else renderCarrito();
+}
+
+/** Da la vuelta el destino de una linea entre mostrador y cocina. */
+function alternarCocina(id, formatoId) {
+  const fId = Number(formatoId) || 0;
+  const l = estado.carrito.find(x => x.id === Number(id) && (x.formato_id || 0) === fId);
+  if (!l) return;
+  l.cocina = !l.cocina;
+  renderCarrito();
+}
+
+/** Las lineas que van a cocina: esto es lo que sale en el papel de la cocina. */
+function lineasDeCocina() {
+  return estado.carrito.filter(l => l.cocina);
 }
 
 /** Cambia el formato de una linea conservando la cantidad. */
@@ -130,13 +148,22 @@ function renderCarrito() {
       const baseCant = r2(l.cantidad * (l.factor || 1));
       const equiv = (l.factor || 1) !== 1
         ? ` · ${esc(cantidadTxt(baseCant, l.unidad))}` : "";
+      // El boton de cocina va en la linea porque el destino se decide ahi: una
+      // Coca que entrega el mostrador y otra que va a cocina son la misma
+      // bebida y solo se distinguen por esto.
+      const coc = l.cocina
+        ? '<button class="btn-cocina on" data-cocina="' + l.id + '" data-cocina-fmt="' + (l.formato_id || 0)
+          + '" title="Va a cocina. Tocalo si lo entrega el mostrador.">🍳 Cocina</button>'
+        : '<button class="btn-cocina" data-cocina="' + l.id + '" data-cocina-fmt="' + (l.formato_id || 0)
+          + '" title="Lo entrega el mostrador. Tocalo si hay que prepararlo.">🍳</button>';
       return `
-      <div class="item" data-linea="${l.id}" data-fmt="${l.formato_id || 0}">
+      <div class="item${l.cocina ? " a-cocina" : ""}" data-linea="${l.id}" data-fmt="${l.formato_id || 0}">
         <div class="info">
           <div class="n" title="${esc(l.nombre)}">${esc(l.nombre)}</div>
           <div class="p">${dinero(l.precio)}${l.formato ? " c/u " + esc(l.formato) : " c/u"}${equiv}</div>
           <div class="presets-linea">${presetsHTML(l)}</div>
         </div>
+        <div class="destino">${coc}</div>
         <div class="cant">
           <button data-menos="${l.id}" data-menos-fmt="${l.formato_id || 0}" title="Quitar uno">−</button>
           <input type="number" step="0.01" min="0" value="${l.cantidad}" data-cant="${l.id}" data-cant-fmt="${l.formato_id || 0}" aria-label="Cantidad">

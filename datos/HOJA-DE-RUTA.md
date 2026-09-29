@@ -99,6 +99,33 @@ parecía lo correcto, pero el buscador y los reportes comparan ese campo en vari
 productos sin control de stock, así que se siembra sola en la migración y no se deja borrar.
 Si se perdiera, ese botón quedaría sin categoría con la que trabajar.
 
+### Un cobro, dos papeles
+
+En un kiosco con rotisería la venta es mezclada: el cliente lleva dos porciones de pizza, una
+hamburguesa, un pancho, una Coca de cola, una de limón y una cerveza, y paga **una sola vez**.
+Lo que va a la cocina y lo que se lleva el mostrador salen del mismo carrito.
+
+Antes eran dos botones y dos cargas: el cajero armaba el ticket, cobraba, y después volvía a
+cargar todo en la comanda de cocina. El doble tipeo no es un problema de paciencia: si se
+equivoca en una de las dos, o la cocina prepara algo que nadie pagó o se cobra algo que nadie
+preparó.
+
+Ahora cada línea del carrito tiene un botón 🍳 que decide su destino. La línea nace con el
+flag de su categoría (`categorias.cocina`, esquema **10**, que el administrador define en
+Ajustes) y el cajero lo da la vuelta con un toque. Al confirmar el cobro, `venta_crear`
+arma la comanda **en la misma transacción** que la venta (`api/rutas/ventas.php`), con las
+líneas marcadas y atada al mismo `folio`, y sale impresa sin pedir nada. Si el papel no sale,
+la comanda queda igual en el tablero de cocina.
+
+La asimetría está a propósito: **el navegador solo puede apagar, nunca encender.** Si la
+categoría está marcada como cocina (tragos, por ejemplo), el servidor la manda igual aunque
+el cliente mande `cocina=0`. Un trago que se queda en el mostrador sin preparar es venta
+perdida; una Coca de más en la comanda es un papel que la cocina descarta. Cuando el
+administrador marque una categoría como cocina, es una decisión de él, no del cajero.
+
+`guardarComanda()` ya existía (`api.php`) y ya se llamaba desde el cobro, pero el frontend
+nunca le pasaba nada: la comanda se armaba con su propio botón. Eso es lo que se conectó.
+
 **`api.php` es sólo el enrutador.** Quedó en 822 líneas (antes 1950) y cada `case` delega
 con `require __DIR__ . '/api/rutas/<archivo>.php';`; las rutas abren su propio
 `switch ($accion)`. Para tocar, por ejemplo, el cobro, se edita `api/rutas/ventas.php` y no

@@ -63,6 +63,7 @@ function conectar() {
       cambiarFormato(id, nuevo);
       return;
     }
+    if (t.dataset.cocina) { alternarCocina(t.dataset.cocina, t.dataset.cocinaFmt); return; }
     if (t.dataset.mas) cambiarCantidad(t.dataset.mas, 1, t.dataset.masFmt);
     else if (t.dataset.menos) cambiarCantidad(t.dataset.menos, -1, t.dataset.menosFmt);
     else if (t.dataset.quitar) quitarLinea(t.dataset.quitar, t.dataset.quitarFmt);

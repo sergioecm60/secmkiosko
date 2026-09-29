@@ -757,6 +757,7 @@ function actualizarEsquema(): array
         `nombre` VARCHAR(60)  NOT NULL,
         `activo` TINYINT(1)   NOT NULL DEFAULT 1,
         `orden`  SMALLINT     NOT NULL DEFAULT 0,
+        `cocina` TINYINT(1)   NOT NULL DEFAULT 0,
         PRIMARY KEY (`id`),
         UNIQUE KEY `uq_nombre` (`nombre`),
         KEY `ix_activo` (`activo`)
@@ -788,6 +789,11 @@ function actualizarEsquema(): array
                 JOIN categorias c ON p.categoria = c.nombre COLLATE utf8mb4_unicode_ci
                 SET p.categoria = c.nombre
                 WHERE p.categoria <> c.nombre');
+
+    // Para las bases que ya venian de la version 9: la columna "cocina" no
+    // estaba en el CREATE de arriba porque esa tabla ya existia. agregarColumna
+    // no hace nada si la columna ya esta.
+    agregarColumna('categorias', '`cocina` TINYINT(1) NOT NULL DEFAULT 0 AFTER `orden`');
 
     $pdo->exec('CREATE TABLE IF NOT EXISTS `comandas` (
         `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -963,7 +969,7 @@ function actualizarEsquema(): array
  * nuevo se aplica solo en el primer request. La marca en `config` evita
  * repetir el trabajo: solo corre de nuevo si el codigo pide una version mayor.
  */
-const ESQUEMA_VERSION = 9;
+const ESQUEMA_VERSION = 10;
 
 function migrarSiHaceFalta(): void
 {

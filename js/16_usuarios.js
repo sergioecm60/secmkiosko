@@ -153,13 +153,13 @@ function renderAjustesZonas() {
 // --- Categorias -------------------------------------------------------------
 // La tabla de arriba. Muestra cuantos productos tiene cada una, porque no se
 // puede borrar una que este en uso y conviene verlo antes de intentarlo.
-let editCategoria = { id: 0, nombre: "" };
+let editCategoria = { id: 0, nombre: "", cocina: 0 };
 
 function renderAjustesCategorias() {
   const tb = $("#a-cat-tb");
   if (!tb) return;
   if (!estado.categorias.length) {
-    tb.innerHTML = '<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--muted)">No hay categorías.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--muted)">No hay categorías.</td></tr>';
     return;
   }
   const usados = estado.categoriasUsadas || {};
@@ -167,6 +167,7 @@ function renderAjustesCategorias() {
     const n = usados[c.nombre] || 0;
     return `<tr>
       <td>${esc(c.nombre)}${c.nombre === "Venta libre" ? ' <span class="marca bajo">del sistema</span>' : ""}</td>
+      <td>${c.cocina ? '<span class="marca ok">🍳 cocina</span>' : '<span style="color:var(--muted)">mostrador</span>'}</td>
       <td class="num">${n}</td>
       <td class="acciones">
         <button class="btn sm" data-edit-cat="${c.id}" title="Editar">✎</button>
@@ -188,9 +189,10 @@ async function cargarCategorias() {
 
 function abrirCategoria(id) {
   const c = id ? estado.categorias.find(x => x.id === id) : null;
-  editCategoria = c ? { id: c.id, nombre: c.nombre } : { id: 0, nombre: "" };
+  editCategoria = c ? { id: c.id, nombre: c.nombre, cocina: c.cocina || 0 } : { id: 0, nombre: "", cocina: 0 };
   $("#ct-titulo").textContent = editCategoria.id ? "Editar categoría" : "Nueva categoría";
   $("#ct-nombre").value = editCategoria.nombre;
+  $("#ct-cocina").checked = !!editCategoria.cocina;
   abrirModal("#m-categoria");
   setTimeout(() => $("#ct-nombre").focus(), 120);
 }
@@ -198,7 +200,7 @@ function abrirCategoria(id) {
 async function guardarCategoria() {
   const nombre = $("#ct-nombre").value.trim();
   if (!nombre) { aviso("La categoría necesita un nombre.", "mal"); return; }
-  const datos = { id: editCategoria.id, nombre };
+  const datos = { id: editCategoria.id, nombre, cocina: $("#ct-cocina").checked ? 1 : 0 };
   try {
     await api("categoria_guardar", datos);
     cerrarModal("#m-categoria");

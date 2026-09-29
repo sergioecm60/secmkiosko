@@ -230,6 +230,21 @@ main{flex:1; min-height:0; position:relative}
 }
 .quitar:hover{background:var(--badbg); color:var(--bad)}
 .presets-linea{margin-top:5px}
+
+/* Destino de la linea: mostrador o cocina. Apagado es solo el icono de la
+   panza, asi la columna no llama la atencion en una venta de kiosco donde
+   casi nada va a cocina. Encendido dice "Cocina" y pinta la fila, para que el
+   cajero vea de un vistazo que va a salir un papel aparte. */
+.item .destino{flex:0 0 auto; align-self:flex-start; padding-top:1px}
+.btn-cocina{
+  border:1px dashed var(--line); background:transparent; color:var(--muted);
+  border-radius:8px; min-width:30px; height:26px; padding:0 7px; cursor:pointer;
+  font-size:12.5px; line-height:1; white-space:nowrap;
+}
+.btn-cocina:hover{border-color:var(--brand); color:var(--brand)}
+.btn-cocina.on{border-style:solid; border-color:var(--ok); background:var(--okbg); color:var(--ok); font-weight:600}
+.item.a-cocina{background:var(--okbg)}
+.item.a-cocina .n{color:var(--ok)}
 .chips{display:flex; flex-wrap:wrap; gap:4px}
 .chip{
   border:1px solid var(--line); background:var(--panel2); color:var(--ink);

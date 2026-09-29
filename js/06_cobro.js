@@ -84,6 +84,9 @@ async function confirmarVenta() {
 
   // La comanda NO viaja con la venta: ya se guardó sola, con su propio
   // botón. Acá sólo se cobra el carrito.
+  // Si hay algo para cocina, la comanda sale sola con el cobro: se arma en el
+  // servidor con las lineas marcadas y queda atada a este folio.
+  const hayCocina = lineasDeCocina().length > 0;
   try {
     const r = await api("venta_crear", {
       items: itemsParaVenta(),
@@ -106,6 +109,14 @@ async function confirmarVenta() {
 
     mostrarVenta(r.venta, true);
     await Promise.all([cargarProductos(), refrescarCabecera(), refrescarMiCaja()]);
+
+    // El papel de la cocina sale apenas se cobra, sin que el cajero tenga que
+    // pedirlo. Si el navegador no puede imprimir, igual queda en el tablero.
+    if (r.comanda_id) {
+      ultimaComanda = { id: r.comanda_id };
+      try { imprimirComanda(r.comanda_id); }
+      catch (e) { aviso("Cobrado. La comanda quedó en el tablero de cocina.", "aviso-w"); }
+    }
     $("#txt-buscar").focus();
   } catch (e) {
     aviso("No se pudo guardar: " + e.message, "mal");
@@ -372,7 +383,11 @@ function itemsParaVenta() {
     formato_unidad: l.formato_unidad || null,
     formato_factor: l.formato_factor || 1,
     cantidad: l.cantidad,
-    precio: l.precio
+    precio: l.precio,
+    // El destino lo decide el cajero linea por linea. Viaja con la venta para
+    // que el servidor arme el papel de la cocina sin que el navegador le
+    // mande una segunda lista de items.
+    cocina: l.cocina ? 1 : 0
   }));
 }
 

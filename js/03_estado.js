@@ -44,6 +44,13 @@ function puedeVender() { return esAdmin() || estado.miRol === "vendedor"; }
 
 const prodPorId = (id) => estado.productos.find(p => p.id === Number(id)) || null;
 
+// Que categoria va a cocina por omision. El administrador lo define en
+// Ajustes -> Mercaderia; el cajero puede dar la vuelta linea por linea.
+function esCategoriaCocina(nombre) {
+  const c = (estado.categorias || []).find(x => x.nombre === nombre);
+  return !!(c && c.cocina);
+}
+
 // Las fichas de Vender salen de la lista maestra que maneja el administrador,
 // no de lo que haya escrito cada producto. Si la lista todavia no llego (el
 // arranque es asincrono) se arma con los productos para no mostrar la pantalla

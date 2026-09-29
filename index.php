@@ -413,7 +413,7 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
           </div>
           <div class="envoltura" style="box-shadow:none;border:0;border-radius:0; max-height:240px; overflow:auto">
             <table class="tabla">
-              <thead><tr><th>Categoría</th><th class="num" style="width:110px">Productos</th><th class="acciones" style="width:120px"></th></tr></thead>
+              <thead><tr><th>Categoría</th><th style="width:130px">Va a</th><th class="num" style="width:110px">Productos</th><th class="acciones" style="width:120px"></th></tr></thead>
               <tbody id="a-cat-tb"></tbody>
             </table>
           </div>
@@ -756,9 +756,19 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
   <div class="modal" style="max-width:400px">
     <div class="modal-cab"><h2 id="ct-titulo">Nueva categoría</h2><button class="cerrar" data-cerrar>✕</button></div>
     <div class="modal-cue">
-      <div class="campo"><label>Nombre de la categoría</label>
+          <div class="campo"><label>Nombre de la categoría</label>
         <input id="ct-nombre" placeholder="Bebidas, Botanas…" maxlength="60" autocomplete="off"></div>
+      <label class="check" style="display:flex;align-items:center;gap:9px;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="ct-cocina" style="width:auto;margin:0">
+        <span>Los productos de esta categoría van a <b>cocina</b></span>
+      </label>
+      <p class="parrafo" style="margin:9px 0 0;font-size:12px">
+        Marca acá la rotisería, las bebidas y los tragos: esas líneas salen
+        solas en la comanda cuando el cajero cobra. El cajero puede dar la
+        vuelta línea por línea, así que esto es el comportamiento por omisión.
+      </p>
     </div>
+
     <div class="modal-pie">
       <button class="btn" data-cerrar>Cancelar</button>
       <button class="btn pri" id="ct-guardar">Guardar categoría</button>

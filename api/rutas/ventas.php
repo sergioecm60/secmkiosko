@@ -1,6 +1,19 @@
 <?php
+/** La categoria esta marcada como "va a cocina" en la lista maestra.
+ *  OJO con el nombre: dice "va", no "siempre va". El servidor lo usa para NO
+ *  dejar apagar una linea que el administrador marco como cocina. */
+function categoriaEsCocina(PDO $bd, string $nombre): bool
+{
+    if ($nombre === '') {
+        return false;
+    }
+    $st = $bd->prepare('SELECT cocina FROM categorias WHERE nombre = ?');
+    $st->execute([$nombre]);
+    return (int) $st->fetchColumn() === 1;
+}
+
 switch ($accion) {
-        case 'venta_crear': {
+case 'venta_crear': {
             // Sin caja abierta no se cobra: así cada venta pertenece a un
             // turno y el cierre se puede conciliar.
             $caja = cajaAbierta();
@@ -125,11 +138,27 @@ switch ($accion) {
                     $lineas[] = [
                         'p' => $pr, 'cant' => $baseCant, 'precio' => $precio,
                         'importe' => $importe, 'formato' => $formato, 'cant_fmt' => $cant,
+                        // Lo decide el cajero en la linea del carrito. El texto
+                        // de la comanda se arma con el nombre real del producto,
+                        // asi que sale del servidor y no del navegador.
+                        'cocina' => (bool) (entero($it['cocina'] ?? 0)),
                     ];
                 }
                 if (!$lineas) {
                     throw new RuntimeException('No hay líneas válidas en el carrito.');
                 }
+
+                // El servidor tiene la ultima palabra sobre el destino a
+                // cocina: si la categoria esta marcada como de cocina (tragos,
+                // rotiseria), la linea va a cocina aunque el navegador digera
+                // que no. Es la unica regla que se le gana al cliente, y a
+                // proposito: un trago que se queda en el mostrador sin
+                // preparar es venta perdida. El navegador solo puede APAGAR
+                // una categoria normal, nunca ENCENDER una de cocina.
+                foreach ($lineas as &$l) {
+                    $l['cocina'] = $l['cocina'] || categoriaEsCocina($bd, (string) ($l['p']['categoria'] ?? ''));
+                }
+                unset($l);
                 if ($descuento > $subtotal) {
                     $descuento = $subtotal;
                 }
@@ -237,6 +266,35 @@ switch ($accion) {
                 // La comanda se guarda en la MISMA transaccion que la venta:
                 // o queda el pedido pagado y su comanda, o no queda nada.
                 $comandaId = null;
+
+                // Sale UNA sola vez: si hay lineas marcadas para cocina, la
+                // comanda se arma sola con esas, atada a este folio. El cajero
+                // no tipea el pedido dos veces.
+                $paraCocina = array_values(array_filter($lineas, fn($l) => $l['cocina'] === true));
+                if ($paraCocina) {
+                    $items = [];
+                    foreach ($paraCocina as $l) {
+                        $detalle = $l['formato'] !== null
+                            ? (string) $l['formato']['unidad'] : null;
+                        $items[] = [
+                            'producto_id' => (int) $l['p']['id'],
+                            'cantidad'    => $l['cant_fmt'],
+                            'texto'       => (string) $l['p']['nombre'],
+                            'detalle'     => $detalle,
+                        ];
+                    }
+                    // Sin delivery, sin zona y sin datos: es consumo en el
+                    // mostrador. La comanda sale con el mismo folio de la
+                    // venta, asi se puede rastrear que se cobro.
+                    $comandaId = guardarComanda($bd, [
+                        'tipo'     => 'mesa',
+                        'cliente'  => $ref ?: 'Mostrador',
+                        'items'    => $items,
+                    ], $ventaId, $folio, $total, $usuario);
+                }
+
+                // Comanda de delivery u otra cosa que venga aparte: la que
+                // armaba el cajero a mano con su propio boton.
                 if (is_array($datosComanda)) {
                     $comandaId = guardarComanda($bd, $datosComanda, $ventaId, $folio, $total, $usuario);
                 }
