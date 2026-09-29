@@ -2031,9 +2031,11 @@ async function renderReportes() {
         <div class="sub">mayor: ${dinero(s.mayor)}</div></div>
       <div class="stat"><div class="cap" style="color:var(--ok)">Ganancia bruta</div>
         <div class="val" style="color:var(--ok)">${dinero(s.utilidad)}</div>
-        <div class="sub">costo de mercancía: ${dinero(s.costo)} · margen ${numeroLocal(s.margen, 1)}%</div></div>
+        <div class="sub">costo de mercancía: ${dinero(s.costo)}</div>
+        <div class="sub">margen ${numeroLocal(s.margen, 1)}%</div></div>
       <div class="stat"><div class="cap">Inventario a costo</div><div class="val">${dinero(s.costo_inventario)}</div>
-        <div class="sub">a venta: ${dinero(s.inventario)} · en anaquel: ${dinero(s.ganancia_potencial)}</div></div>
+        <div class="sub">a venta: ${dinero(s.inventario)}</div>
+        <div class="sub">en anaquel: ${dinero(s.ganancia_potencial)}</div></div>
       <div class="stat"><div class="cap">Anuladas</div><div class="val" style="${s.anuladas ? "color:var(--bad)" : ""}">${numeroLocal(s.anuladas, 0)}</div>
         <div class="sub">${numeroLocal(s.unidades, 2)} unidades en almacén</div></div>`;
 

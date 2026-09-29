@@ -35,6 +35,10 @@ code{font-family:Consolas,"Courier New",monospace; background:var(--panel2); pad
   display:flex; align-items:center; gap:18px; padding:0 16px; height:62px; flex:0 0 62px;
   background:var(--panel); border-bottom:1px solid var(--line); box-shadow:var(--shadow); z-index:30;
 }
+/* La navegacion manda en la cabecera. brand, caja-dia, sesion-caja y el
+   menu de usuario ceden espacio (flex-shrink) para que los 7 botones nunca
+   queden fuera de la vista. */
+.topbar > .brand, .topbar > .sesion-caja, .topbar > .menu-usuario{flex-shrink:1; min-width:0}
 .brand{display:flex; align-items:center; gap:11px; min-width:0}
 .logo{
   width:38px; height:38px; flex:0 0 38px; border-radius:11px; display:grid; place-items:center;
@@ -42,11 +46,14 @@ code{font-family:Consolas,"Courier New",monospace; background:var(--panel2); pad
 }
 .negocio{font-weight:700; font-size:15px; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:190px}
 .sub{font-size:11.5px; color:var(--muted); white-space:nowrap}
-.tabs{display:flex; gap:4px; margin-left:8px; flex:1; min-width:0; overflow:auto; scrollbar-width:none}
-.tabs::-webkit-scrollbar{display:none}
+/* flex-basis:0 para que las pestañas repartan el espacio sobrante en vez de
+   quedarse con lo que sobre. min-width evita que se compriman por debajo de
+   lo que ocupan sus botones: si no, quedan cortadas a la mitad. */
+.tabs{display:flex; gap:4px; margin-left:8px; flex:1 1 auto; min-width:max-content}
 .tabs button{
   background:transparent; border:0; padding:9px 15px; border-radius:9px; cursor:pointer;
-  color:var(--muted); font-weight:600; white-space:nowrap; transition:background var(--t), color var(--t);
+  color:var(--muted); font-weight:600; white-space:nowrap; flex:0 0 auto;
+  transition:background var(--t), color var(--t);
 }
 .tabs button:hover{background:var(--panel2); color:var(--ink)}
 .tabs button.on{background:var(--brand); color:var(--onbrand)}
@@ -58,6 +65,42 @@ code{font-family:Consolas,"Courier New",monospace; background:var(--panel2); pad
   border-radius:10px; cursor:pointer; font-size:17px; display:grid; place-items:center; transition:background var(--t);
 }
 .icono:hover{background:var(--panel2)}
+
+/* ---------------- CABECERA EN PANTALLAS CHICAS ----------------
+   Los 7 botones tienen que seguir siendo alcanzables. Las pestañas ya no se
+   comprimen (min-width:max-content), asi que aca se va sacando lo que NO es
+   navegacion para dejarles lugar: primero los datos del usuario (deja el
+   avatar), despues el estado de caja, la marca y el total de hoy. */
+@media (max-width:1180px){
+  .negocio{max-width:130px}
+  .topbar{gap:12px}
+  .tabs button{padding:9px 12px}
+}
+@media (max-width:1040px){
+  .topbar{gap:10px; padding:0 12px}
+  .tabs button{padding:9px 11px; font-size:13.5px}
+}
+@media (max-width:960px){
+  .sesion-caja, .caja-dia{display:none}
+  .udatos{display:none}
+  .usuario-btn{padding:5px}
+  .logo{width:32px; height:32px; flex-basis:32px; font-size:16px}
+  .icono{width:32px; height:32px; flex-basis:32px; font-size:15px}
+  .tabs button{padding:9px 8px; font-size:12.5px}
+}
+@media (max-width:900px){
+  .brand .negocio, .brand .sub{display:none}
+  .topbar{gap:8px}
+  .tabs{margin-left:2px}
+  .tabs button{padding:9px 9px; font-size:13px}
+}
+/* Con la ventana muy angucha se aprieta el relleno, pero el boton sigue
+   leyendose entero: el title y el texto completo quedan a la vista. */
+@media (max-width:820px){
+  .topbar{gap:6px; padding:0 8px}
+  .tabs{gap:2px}
+  .tabs button{padding:9px 6px; font-size:12px; letter-spacing:-.2px}
+}
 
 /* ---------------- VISTAS ---------------- */
 main{flex:1; min-height:0; position:relative}
@@ -71,6 +114,23 @@ main{flex:1; min-height:0; position:relative}
 .pos-der{
   width:390px; flex:0 0 390px; background:var(--panel); border-left:1px solid var(--line);
   display:flex; flex-direction:column; min-height:0;
+}
+/* En una ventana angucha el carrito fijo de 390px se comia el catalogo. Se
+   angosta primero, y bajo 560px se vuelve una franja abajo con scroll. */
+@media (max-width:1100px){
+  .pos-der{width:330px; flex-basis:330px}
+}
+@media (max-width:900px){
+  .pos-der{width:280px; flex-basis:280px}
+  .pos-izq{padding:10px; gap:10px}
+}
+@media (max-width:640px){
+  .pos{flex-direction:column}
+  .pos-izq{order:2; flex:1 1 auto; min-height:180px}
+  .pos-der{
+    order:1; width:100%; flex:0 0 auto; max-height:44vh;
+    border-left:0; border-bottom:1px solid var(--line);
+  }
 }
 .buscador{position:relative; flex:0 0 auto}
 .buscador input{
@@ -96,7 +156,7 @@ main{flex:1; min-height:0; position:relative}
 
 .grid{
   flex:1; min-height:0; overflow:auto; display:grid; gap:11px; align-content:start;
-  grid-template-columns:repeat(auto-fill, minmax(132px,1fr)); padding-bottom:6px;
+  grid-template-columns:repeat(auto-fill, minmax(min(132px,100%),1fr)); padding-bottom:6px;
 }
 .prod{
   background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:9px;
@@ -128,7 +188,10 @@ main{flex:1; min-height:0; position:relative}
   margin:0 0 10px; padding:8px 10px;
   background:var(--card); border:1px solid var(--line); border-radius:10px;
 }
-.barra-rapida .fuente{color:var(--muted); font-size:12.5px; flex:1; min-width:0}
+/* min-width mas alto que 0 para que el texto no se apelmice a 33px, y
+   flex-basis:auto para que los botones anchos lo empijen a la linea de
+   abajo en vez de cortarlo. */
+.barra-rapida .fuente{color:var(--muted); font-size:12.5px; flex:1 1 180px; min-width:150px; overflow-wrap:anywhere}
 
 /* Carrito */
 .carrito-cab{
@@ -214,11 +277,27 @@ main{flex:1; min-height:0; position:relative}
 }
 .campo textarea{height:auto; padding:10px 12px; resize:vertical; min-height:70px; font-family:inherit}
 .campo input:focus,.campo select:focus,.campo textarea:focus{border-color:var(--brand); background:var(--panel)}
-.rejilla{display:grid; gap:13px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
-.rejilla2{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); align-items:start}
+.rejilla{display:grid; gap:13px; grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr))}
+/* minmax(340px) hacia una columna de 340 minimos. En ventanas de 640 o menos
+   eso ya no entra y la columna se sale del ancho disponible. Con min(100%)
+   la grilla puede bajar de 340 y de ahi pasar a una sola columna. */
+.rejilla2{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr)); align-items:start}
 
 /* --- Ajustes: secciones apiladas, cada una con su propia retÃ­cula --- */
-.ajustes{display:flex; flex-direction:column; gap:14px; max-width:1180px}
+/* width:100% explicito: en un flex column el ancho lo decide el contenido,
+   asi que sin esto un hijo ancho estira la columna y la vista se sale. */
+.ajustes{display:flex; flex-direction:column; gap:14px; width:100%; max-width:1180px; min-width:0}
+.ajustes > *{min-width:0; max-width:100%}
+/* Las tarjetas y las grillas tambien tienen que poder encogerse por debajo
+   del ancho de su contenido (una tabla scrolleable, por ejemplo). */
+.ajustes .card, .ajustes .rejilla1, .ajustes .rejilla2, .ajustes .rejilla{min-width:0}
+.ajustes .card-cue, .ajustes .envoltura{min-width:0; max-width:100%}
+/* En ventanas muy anguchas (menos de 480px) alguna tarjeta con contenido
+   ancho todavia empuja. En vez de cortar informacion, la vista scrollea. */
+@media (max-width:480px){
+  .ajustes{overflow-x:auto}
+  .rejilla1{min-width:0}
+}
 .ajustes-tit{
   font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
   color:var(--muted); margin:8px 0 -2px; padding-left:2px;
@@ -238,7 +317,7 @@ main{flex:1; min-height:0; position:relative}
 .sesion-caja.abierto .pv{color:var(--ok)}
 .sesion-caja.cerrado .pv{color:var(--warn)}
 
-.menu-usuario{position:relative; flex:0 0 auto}
+.menu-usuario{position:relative; flex:0 1 auto; min-width:0}
 .usuario-btn{
   display:flex; align-items:center; gap:9px; padding:5px 9px 5px 5px;
   background:var(--panel); border:1px solid var(--line); border-radius:11px; cursor:pointer;
@@ -290,7 +369,7 @@ body[data-rol="vendedor"] .solo-admin{display:none !important}
 .caja-abrir .txt b{display:block; font-size:14.5px; margin-bottom:3px}
 .caja-abrir .txt span{font-size:12.5px; color:var(--muted); line-height:1.45}
 
-.caja-nums{display:grid; grid-template-columns:repeat(auto-fit,minmax(122px,1fr)); gap:10px}
+.caja-nums{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(122px,100%),1fr)); gap:10px}
 .caja-nums .n{
   background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:11px 12px;
 }
@@ -388,6 +467,56 @@ body[data-rol="vendedor"] .solo-admin{display:none !important}
 .tabla .num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
 .tabla .acciones{text-align:right; white-space:nowrap}
 .tabla .fuente{color:var(--muted)}
+/* Tabla de atajos de cocina en Ajustes: 5 columnas con textos largos. Con
+   anchos fijos en px sumaba mas de lo que entra en una ventana chica y
+   empujaba toda la vista. Con table-layout fixed reparten el 100%: las
+   cuatro de texto en porcentaje y la de acciones en px, pero los
+   porcentajes tienen que dejarle lugar a los px o la tabla se pasa de
+   ancho. */
+.tabla-ajustes{table-layout:fixed; width:100%}
+/* Solo la columna de acciones lleva ancho fijo (100px para los dos botones
+   de lapiz y papelera con su padding). Las otras quedan en auto y con
+   table-layout fixed el navegador reparte el ancho restante entre ellas. */
+.tabla-ajustes th:nth-child(5){width:100px; padding-left:6px; padding-right:6px}
+/* .tabla th viene con white-space:nowrap; aca la cabecera tiene que poder
+   partirse en dos lineas o el texto se sale de su celda. */
+.tabla-ajustes th{white-space:normal}
+.tabla-ajustes td{white-space:normal; overflow-wrap:anywhere; line-height:1.4}
+.tabla-ajustes .acciones{white-space:nowrap; overflow:visible; padding-left:6px; padding-right:6px}
+/* Zonas de reparto: 3 columnas, la de nombre con texto libre. */
+.tabla-zonas{table-layout:fixed; width:100%}
+.tabla-zonas th:nth-child(2){width:30%}
+.tabla-zonas th:nth-child(3){width:100px; padding-left:6px; padding-right:6px}
+.tabla-zonas th{white-space:normal}
+.tabla-zonas td{white-space:normal; overflow-wrap:anywhere; line-height:1.4}
+.tabla-zonas .acciones{padding-left:6px; padding-right:6px}
+
+/* Usuarios del sistema: 8 columnas. Con anchos fijos sumaba mas de 700px y
+   empujaba la vista de Ajustes entera. Se deja que el navegador reparta. */
+.tabla-usuarios{table-layout:fixed; width:100%}
+.tabla-usuarios th{white-space:normal}
+.tabla-usuarios th:nth-child(1){width:38px}
+.tabla-usuarios th:nth-child(5){width:56px}
+.tabla-usuarios th:nth-child(8){width:92px; padding-left:6px; padding-right:6px}
+.tabla-usuarios td{white-space:normal; overflow-wrap:anywhere; line-height:1.4}
+.tabla-usuarios .acciones{white-space:nowrap; overflow:visible; padding-left:6px; padding-right:6px}
+/* Con menos de 900px la tabla de usuarios scrollea sola. El min-width va
+   en la tabla, no en la tarjeta, asi la vista no se estira: la envoltura
+   le hace scroll horizontal. */
+@media (max-width:900px){
+  .tabla-usuarios{min-width:620px}
+  .envoltura:has(.tabla-usuarios){overflow-x:auto}
+}
+
+/* La tabla de atajos tiene 5 columnas. Cuando la tarjeta de Ajustes queda
+   en dos columnas angostas (ventana de 700 a 1100px) la tabla baja a 370px
+   y las cabeceras no entran. Ahi scrollea en vez de apretar. */
+@media (max-width:1100px){
+  .tabla-ajustes{min-width:520px}
+  /* la envoltura recorta con overflow:hidden; acida se deja scrollear */
+  .envoltura:has(.tabla-ajustes){overflow-x:auto}
+}
+
 /* Detalle de venta: vive en un modal de 470 px, asi que el nombre del
    articulo necesita su lugar. Las columnas de importes se angostas y el
    nombre se parte en varias lineas antes que empujar la tabla a scroll. */
@@ -452,11 +581,22 @@ kbd{
 }
 
 /* ---------------- ESTADÃSTICAS ---------------- */
-.stats{display:grid; gap:13px; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); margin-bottom:16px}
-.stat{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:15px 16px; box-shadow:var(--shadow)}
+.stats{display:grid; gap:13px; grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr)); margin-bottom:16px}
+/* Con una sola tarjeta por fila el padding de 16px por lado se come el
+   ancho. En pantallas chicas baja a una columna y el texto respira. */
+@media (max-width:560px){
+  .stats{grid-template-columns:1fr}
+  .stat{padding:13px 14px}
+}
+/* min-width:0 para que la tarjeta pueda encogerse por debajo del ancho de su
+   contenido; sin esto el subtitulo largo (dos importes en una linea) empuja
+   la grilla y desborda. */
+.stat{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:15px 16px; box-shadow:var(--shadow); min-width:0; overflow:hidden}
 .stat .cap{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; font-weight:650}
 .stat .val{font-size:26px; font-weight:800; margin-top:5px; font-variant-numeric:tabular-nums; letter-spacing:-.5px}
-.stat .sub{font-size:12px; color:var(--muted); margin-top:3px}
+/* El subtitulo lleva a veces dos importes separados por un punto medio.
+   Con overflow-wrap parte en dos lineas en vez de salirse de la tarjeta. */
+.stat .sub{font-size:12px; color:var(--muted); margin-top:3px; overflow-wrap:anywhere}
 .stat.acento .val{color:var(--brand)}
 /* Las 24 horas siempre se muestran, asi que el ancho minimo por barra es lo
    que evita que al achicar la ventana se vuelvan lineas de 1 px. Si igual
@@ -644,7 +784,7 @@ kbd{
 .switch input{width:16px; height:16px; cursor:pointer}
 
 .cocina-tablero{
-  display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr));
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(min(300px,100%), 1fr));
   gap:14px; align-items:start;
 }
 .coc-vacia{

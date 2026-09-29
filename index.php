@@ -48,13 +48,13 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
     </div>
   </div>
   <nav class="tabs" id="tabs">
-    <button data-v="vender" class="on">Vender</button>
-    <button data-v="productos">Productos</button>
-    <button data-v="historial">Historial</button>
-    <button data-v="cajas"><?= $soyAdmin ? 'Cajas' : 'Mi caja' ?></button>
-    <button data-v="reportes">Reportes</button>
-    <button data-v="cocina" class="tab-cocina">🍳 Cocina <span class="pill" id="coc-pend" hidden>0</span></button>
-    <button data-v="ajustes">Ajustes</button>
+    <button data-v="vender" class="on" title="Vender">Vender</button>
+    <button data-v="productos" title="Productos">Productos</button>
+    <button data-v="historial" title="Historial">Historial</button>
+    <button data-v="cajas" title="<?= $soyAdmin ? 'Cajas' : 'Mi caja' ?>"><?= $soyAdmin ? 'Cajas' : 'Mi caja' ?></button>
+    <button data-v="reportes" title="Reportes">Reportes</button>
+    <button data-v="cocina" class="tab-cocina" title="Cocina">🍳 Cocina <span class="pill" id="coc-pend" hidden>0</span></button>
+    <button data-v="ajustes" title="Ajustes">Ajustes</button>
   </nav>
   <div class="caja-dia">
     <div class="cap">Ventas de hoy</div>
@@ -454,14 +454,14 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
             stock</b> como cualquier otra línea. Si no tiene producto, es solo texto para cocina.
           </p>
           <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
-            <table class="tabla">
+            <table class="tabla tabla-ajustes">
               <thead>
                 <tr>
-                  <th style="width:90px">Sección</th>
-                  <th style="width:130px">Botón</th>
+                  <th>Sección</th>
+                  <th>Botón</th>
                   <th>Qué prepara</th>
-                  <th style="width:150px">Producto</th>
-                  <th style="width:40px"></th>
+                  <th>Producto</th>
+                  <th class="acciones"></th>
                 </tr>
               </thead>
               <tbody id="atajos-tb"></tbody>
@@ -478,12 +478,12 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
             El costo se suma al total cuando el pedido es por reparto. Dejalo en 0 si no cobrás envío.
           </p>
           <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
-            <table class="tabla">
+            <table class="tabla tabla-zonas">
               <thead>
                 <tr>
                   <th>Zona</th>
-                  <th class="num" style="width:120px">Costo de envío</th>
-                  <th style="width:40px"></th>
+                  <th class="num">Costo de envío</th>
+                  <th class="acciones"></th>
                 </tr>
               </thead>
               <tbody id="zonas-tb"></tbody>
@@ -508,17 +508,17 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
             sólo ve el tablero de comandas y marca los pedidos: no cobra ni abre caja.
           </p>
           <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
-            <table class="tabla">
+            <table class="tabla tabla-usuarios">
               <thead>
                 <tr>
-                  <th style="width:40px"></th>
-                  <th style="width:130px">Usuario</th>
+                  <th></th>
+                  <th>Usuario</th>
                   <th>Nombre</th>
-                  <th style="width:120px">Rol</th>
-                  <th class="num" style="width:70px">Cajas</th>
-                  <th style="width:130px">Último ingreso</th>
-                  <th style="width:90px">Estado</th>
-                  <th class="acciones" style="width:150px"></th>
+                  <th>Rol</th>
+                  <th class="num">Cajas</th>
+                  <th>Último ingreso</th>
+                  <th>Estado</th>
+                  <th class="acciones"></th>
                 </tr>
               </thead>
               <tbody id="usuarios-tb"></tbody>
