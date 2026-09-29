@@ -1175,12 +1175,25 @@ try {
                 }
                 $total = redondear($subtotal - $descuento + $envio);
 
-                // 2. Folio
-                $st = $bd->query('SELECT COALESCE(MAX(folio),0) FROM ventas');
-                $folio = ((int) $st->fetchColumn()) + 1;
-                if ($folio < (int) valorConfig('folio', 1)) {
-                    $folio = (int) valorConfig('folio', 1);
+                // 2. Folio. Se reserva con una fila contadora bloqueada con
+                //    FOR UPDATE: con dos cajeros cobrando en el mismo
+                //    instante, el segundo espera a que el primero libere el
+                //    lock en vez de sacar el mismo numero y chocar con el
+                //    UNIQUE de ventas.folio.
+                $st = $bd->prepare('SELECT `valor` FROM `contadores` WHERE `nombre` = ? FOR UPDATE');
+                $st->execute(['folio']);
+                $actual = $st->fetchColumn();
+                if ($actual === false) {
+                    // Contador ausente (base vieja): se crea y se vuelve a leer.
+                    $bd->prepare('INSERT INTO `contadores` (`nombre`,`valor`) VALUES (?,?)')
+                       ->execute(['folio', 0]);
+                    $st = $bd->prepare('SELECT `valor` FROM `contadores` WHERE `nombre` = ? FOR UPDATE');
+                    $st->execute(['folio']);
+                    $actual = $st->fetchColumn();
                 }
+                $folio = ((int) $actual) + 1;
+                $bd->prepare('UPDATE `contadores` SET `valor` = ? WHERE `nombre` = ?')
+                   ->execute([$folio, 'folio']);
 
                 // 3. Cabecera
                 $st = $bd->prepare(
@@ -1524,6 +1537,14 @@ try {
                     $cambios++;
                 }
             }
+            // Ajustar el folio desde Ajustes tiene que mover el contador, o
+            // la proxima venta volveria a arrancar desde el valor viejo.
+            if (p('folio') !== null) {
+                $siguiente = max(1, pInt('folio', 1)) - 1;
+                $bd->prepare('INSERT INTO `contadores` (`nombre`,`valor`) VALUES (?,?)
+                             ON DUPLICATE KEY UPDATE `valor` = ?')
+                   ->execute(['folio', $siguiente, $siguiente]);
+            }
             salida(['ok' => true, 'cambios' => $cambios, 'config' => leerConfig()]);
         }
 
@@ -1546,6 +1567,9 @@ try {
                     $bd->exec('DELETE FROM ventas');
                     $total = (int) $bd->query('SELECT COUNT(*) FROM movimientos')->fetchColumn();
                     guardarConfig('folio', '1');
+                    $bd->prepare('INSERT INTO `contadores` (`nombre`,`valor`) VALUES (?,?)
+                                 ON DUPLICATE KEY UPDATE `valor` = ?')
+                       ->execute(['folio', 0, 0]);
                 } elseif ($que === 'productos') {
                     $bd->exec('UPDATE venta_items SET producto_id = NULL');
                     $bd->exec('DELETE FROM productos');

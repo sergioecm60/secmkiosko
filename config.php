@@ -1,6 +1,6 @@
 <?php
 /**
- * Kiosco — configuracion general y conexion a la base de datos.
+ * Kiosco â€” configuracion general y conexion a la base de datos.
  * Compatible con PHP 8.1+ y MySQL 8 / MariaDB 10.4+
  */
 declare(strict_types=1);
@@ -189,7 +189,7 @@ const CONFIG_INICIAL = [
     'moneda'   => '$',
     'direccion' => '',
     'telefono' => '',
-    'pie'      => '¡Gracias por su compra!',
+    'pie'      => 'Â¡Gracias por su compra!',
     'logo'     => 'K',
     'folio'    => '1',
     'pin'      => '',
@@ -462,15 +462,15 @@ function registrarMovimiento(array $d): void
         $d['usuario'] ?? null,
         $d['proveedor_id'] ?? null,
         $d['documento'] ?? null,
-        // Que formato de compra o de venta originó el movimiento.
+        // Que formato de compra o de venta originÃ³ el movimiento.
         $d['nota'] ?? null,
     ]);
 }
 
 /**
  * Nombre que queda impreso en el ticket y en el historial de ventas.
- * Si hay alguien con sesión iniciada se usa su nombre real; si no,
- * se cae al valor de configuración (instalaciones viejas, respaldo, etc).
+ * Si hay alguien con sesiÃ³n iniciada se usa su nombre real; si no,
+ * se cae al valor de configuraciÃ³n (instalaciones viejas, respaldo, etc).
  */
 function nombreUsuario(): string
 {
@@ -529,7 +529,7 @@ function actualizarEsquema(): array
     agregarColumna('productos', '`proveedor_id` INT UNSIGNED NULL');
     $hechas[] = 'productos: costo, observaciones, proveedor_id';
 
-    // --- 1b. Compra en múltiplos y venta fraccionada (granel) ---
+    // --- 1b. Compra en mÃºltiplos y venta fraccionada (granel) ---
     // El stock SIEMPRE se cuenta en la unidad base (kg, unidad, etc).
     // unidad_compra/factor_compra sirven para comprar en maples, cajones,
     // bolsas o docenas: 1 maple = 30 unidades, 1 bolsa = 10 kg.
@@ -599,7 +599,7 @@ function actualizarEsquema(): array
     agregarColumna('movimientos', '`nota` VARCHAR(80) NULL');
     $hechas[] = 'movimientos: proveedor_id, documento';
 
-    // El costo se congela al vender: si mañana suben el precio de compra,
+    // El costo se congela al vender: si maÃ±ana suben el precio de compra,
     // el margen historico de las ventas viejas no debe cambiar.
     agregarColumna('venta_items', '`costo_unitario` DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     $hechas[] = 'venta_items: costo_unitario';
@@ -620,10 +620,10 @@ function actualizarEsquema(): array
     if ($n === 0) {
         $st = $pdo->prepare('INSERT INTO `medios_pago` (`nombre`,`icono`,`exige_referencia`,`orden`,`es_efectivo`) VALUES (?,?,?,?,?)');
         $defectos = [
-            ['Efectivo',       '💵', 0, 1, 1],
-            ['Tarjeta',        '💳', 1, 2, 0],
-            ['Transferencia',  '📱', 1, 3, 0],
-            ['Mercado Pago',   '🅿️', 1, 4, 0],
+            ['Efectivo',       'ðŸ’µ', 0, 1, 1],
+            ['Tarjeta',        'ðŸ’³', 1, 2, 0],
+            ['Transferencia',  'ðŸ“±', 1, 3, 0],
+            ['Mercado Pago',   'ðŸ…¿ï¸', 1, 4, 0],
         ];
         foreach ($defectos as $d) {
             $st->execute($d);
@@ -632,7 +632,7 @@ function actualizarEsquema(): array
     }
 
     /* --- 7. Usuarios, roles y cajas ---------------------------------
-       El login y el control de caja viven acá. La clave se guarda
+       El login y el control de caja viven acÃ¡. La clave se guarda
        hasheada (password_hash de PHP), nunca en texto plano.       */
     $pdo->exec('CREATE TABLE IF NOT EXISTS `usuarios` (
         `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -670,8 +670,8 @@ function actualizarEsquema(): array
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $hechas[] = 'tabla cajas';
 
-    // Conciliación método por método al cerrar: lo que el sistema dice
-    // que entró contra lo que el cajero contó de verdad.
+    // ConciliaciÃ³n mÃ©todo por mÃ©todo al cerrar: lo que el sistema dice
+    // que entrÃ³ contra lo que el cajero contÃ³ de verdad.
     $pdo->exec('CREATE TABLE IF NOT EXISTS `caja_cierre_metodos` (
         `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
         `caja_id`       INT UNSIGNED NOT NULL,
@@ -684,7 +684,7 @@ function actualizarEsquema(): array
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $hechas[] = 'tabla caja_cierre_metodos';
 
-    // Cada venta queda atada a la caja en la que se cobró. Sin esto el
+    // Cada venta queda atada a la caja en la que se cobrÃ³. Sin esto el
     // cierre no puede conciliar y el vendedor se come los descuadres.
     agregarColumna('ventas', '`caja_id` INT UNSIGNED NULL');
     agregarColumna('ventas', '`medio_pago_id` SMALLINT UNSIGNED NULL');
@@ -696,12 +696,12 @@ function actualizarEsquema(): array
     $hechas[] = 'ventas: caja_id, medio_pago_id, anulada_por, envio';
 
     /* --- 8. Comandas de cocina y delivery ---------------------------
-       El pedido se cobra como una venta normal, pero además queda una
-       "comanda": la lista que cocina tiene que preparar y a quién
-       entregársela. Los atajos son los botones que el vendedor toca para
+       El pedido se cobra como una venta normal, pero ademÃ¡s queda una
+       "comanda": la lista que cocina tiene que preparar y a quiÃ©n
+       entregÃ¡rsela. Los atajos son los botones que el vendedor toca para
        no tener que escribir (1 pancho, 1 miga, 1 coc 2.25...). Un atajo
-       puede apuntar a un producto del catalogo —entonces cobra y descuenta
-       stock como cualquier otra linea— o ser solo texto para la cocina. */
+       puede apuntar a un producto del catalogo â€”entonces cobra y descuenta
+       stock como cualquier otra lineaâ€” o ser solo texto para la cocina. */
     $pdo->exec('CREATE TABLE IF NOT EXISTS `zonas` (
         `id`      SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
         `nombre`  VARCHAR(60)  NOT NULL,
@@ -775,6 +775,30 @@ function actualizarEsquema(): array
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $hechas[] = 'tabla comanda_atajos';
 
+    /* --- Contador de folios ----------------------------------------------
+       Calcular el folio con MAX(folio)+1 sobre `ventas` no es seguro: dos
+       cajeros cobrando en el mismo instante leen el mismo maximo y sacan
+       el mismo folio. Como `ventas.folio` es UNIQUE, uno de los dos falla
+       con error de clave duplicada y el cajero ve un fallo sin explicacion.
+
+       Se resuelve con una fila contadora propia, bloqueada con FOR UPDATE
+       dentro de la transaccion: el segundo cajero espera a que el primero
+       termine de reservar su folio. */
+    $pdo->exec('CREATE TABLE IF NOT EXISTS `contadores` (
+        `nombre` VARCHAR(30)  NOT NULL,
+        `valor`  BIGINT UNSIGNED NOT NULL DEFAULT 0,
+        PRIMARY KEY (`nombre`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    $hechas[] = 'tabla contadores';
+
+    // El contador nunca arranca por debajo del folio ya emitido ni del
+    // configurado a mano, para no reasignar un numero que ya salio.
+    $stC = $pdo->query('SELECT COALESCE(MAX(folio),0) FROM ventas')->fetchColumn();
+    $cfgFolio = (int) ($pdo->query("SELECT valor FROM `config` WHERE clave = 'folio'")->fetchColumn() ?: 1);
+    $pdo->prepare('INSERT INTO `contadores` (`nombre`,`valor`) VALUES (?,?)
+                   ON DUPLICATE KEY UPDATE `valor` = GREATEST(`valor`, VALUES(`valor`))')
+        ->execute(['folio', max(1, (int) $stC, $cfgFolio)]);
+
     /* --- 9. Productos que se venden sin controlar stock ---------------
        Una venta espontanea (el pancho que pidio Pepe, una pizza armada en el
        momento) no viene de un stock que se cuente: se carga el producto en
@@ -800,8 +824,8 @@ function actualizarEsquema(): array
         $defectos = [
             ['Comidas', '1 hamburguesa', 'Hamburguesa completa', 'con lechuga, tomate y queso', 1],
             ['Comidas', '1 pancho',      'Pancho',                 'hamburguesa completa',           2],
-            ['Comidas', '1 miga',        'Sándwich de miga',       null,                             3],
-            ['Comidas', '1 milanesa',    'Sándwich de milanesa',   null,                             4],
+            ['Comidas', '1 miga',        'SÃ¡ndwich de miga',       null,                             3],
+            ['Comidas', '1 milanesa',    'SÃ¡ndwich de milanesa',   null,                             4],
             ['Comidas', '1 pollo',       'Pollo con papas',        null,                             5],
             ['Bebidas', '1 cerveza',     'Cerveza',                null,                             1],
             ['Bebidas', '1 coc 1L',      'Coca Cola',              'botella de 1 litro',             2],
@@ -809,7 +833,7 @@ function actualizarEsquema(): array
             ['Bebidas', '1 coc 2.25',    'Coca Cola',              'botella de 2 litros y cuarto',   4],
             ['Tragos',  '1 vino',        'Vaso de vino',           null,                             1],
             ['Tragos',  '1 gin',         'Gin',                    null,                             2],
-            ['Tragos',  '1 pina',        'Piña colada',            null,                             3],
+            ['Tragos',  '1 pina',        'PiÃ±a colada',            null,                             3],
             ['Tragos',  '1 gancia',      'Gancia fernet',          null,                             4],
             ['Tragos',  '1 mesclado',    'Trago mesclado',         null,                             5],
         ];
@@ -822,7 +846,7 @@ function actualizarEsquema(): array
     // --- 1d. Migrar los formatos viejos a la tabla nueva ---
     // Los productos que ya tengan unidad_compra se vuelven a comprar por ese
     // formato; los presets de venta se convierten en formatos de 1 unidad base
-    // cada uno, que es como venían funcionando.
+    // cada uno, que es como venÃ­an funcionando.
     $st = $pdo->query('SELECT id, nombre, unidad, precio, costo, unidad_compra, factor_compra,
                               precio_compra, presets
                        FROM productos');
@@ -863,7 +887,7 @@ function actualizarEsquema(): array
  * nuevo se aplica solo en el primer request. La marca en `config` evita
  * repetir el trabajo: solo corre de nuevo si el codigo pide una version mayor.
  */
-const ESQUEMA_VERSION = 7;
+const ESQUEMA_VERSION = 8;
 
 function migrarSiHaceFalta(): void
 {
@@ -912,7 +936,7 @@ function volcarSQL(?string $archivo = null): string
     $salida = '';
 
     $salida .= "-- ==================================================\n";
-    $salida .= "-- " . APP_NOMBRE . " — respaldo de la base de datos\n";
+    $salida .= "-- " . APP_NOMBRE . " â€” respaldo de la base de datos\n";
     $salida .= '-- Generado: ' . date('d/m/Y H:i:s') . "\n";
     $salida .= "-- Base: " . DB_NOMBRE . " (" . PHP_VERSION . " / MySQL " . $pdo->query('SELECT VERSION()')->fetchColumn() . ")\n";
     $salida .= "-- Para restaurar: mysql -u root kiosco < este_archivo.sql\n";
@@ -974,7 +998,7 @@ function crearRespaldo(string $motivo = 'manual'): string
  */
 function dividirSentencias(string $sql): array
 {
-    $sql = preg_replace('/^﻿/', '', $sql);
+    $sql = preg_replace('/^ï»¿/', '', $sql);
     $sentencias = [];
     $actual = '';
     $enComilla = false;
