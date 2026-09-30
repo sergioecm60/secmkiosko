@@ -72,9 +72,10 @@ async function iniciar() {
     aplicarMarca();
     renderPOS();
     $("#txt-buscar").focus();
-    // Zonas y atajos se cargan siempre: el botón de delivery los necesita.
-    api("comanda_atajos").then(r => { estado.atajos = r.atajos || []; }).catch(() => {});
-    api("zonas").then(r => { estado.zonas = r.zonas || []; }).catch(() => {});
+        // Zonas: hoy no se usan para delivery, pero se dejan cargadas para que
+        // volver a activarlo sea solo cambiar el flujo de la comanda.
+        api("zonas").then(r => { estado.zonas = r.zonas || []; }).catch(() => {});
+
     api("categorias").then(r => { estado.categorias = r.categorias || []; }).catch(() => {});
     if (esAdmin()) cargarAjustesCocina().catch(() => {});
   } catch (e) {

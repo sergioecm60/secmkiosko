@@ -39,6 +39,13 @@ case 'venta_crear': {
             $usuario   = nombreUsuario();
             $datosComanda = p('comanda');
 
+            /* Nombre de quien retira. Antes la comanda se llenaba sola con el
+               campo "referencia" del cobro, que es para los ultimos 4 digitos o
+               el numero de autorizacion: en la practica la comanda salia
+               siempre como "Mostrador" y el nombre no se pedia en ningun lado. */
+            $nombreRetiro = pTxt('comanda_cliente', 80);
+            if ($nombreRetiro === '') $nombreRetiro = 'Mostrador';
+
             // El costo del reparto se resuelve de la zona configurada antes de
             // sumar el total: si mandan otra cifra por el cliente, se ignora.
             $envio = 0.0;
@@ -288,14 +295,18 @@ case 'venta_crear': {
                     // venta, asi se puede rastrear que se cobro.
                     $comandaId = guardarComanda($bd, [
                         'tipo'     => 'mesa',
-                        'cliente'  => $ref ?: 'Mostrador',
+                        'cliente'  => $nombreRetiro,
                         'items'    => $items,
                     ], $ventaId, $folio, $total, $usuario);
                 }
 
-                // Comanda de delivery u otra cosa que venga aparte: la que
-                // armaba el cajero a mano con su propio boton.
-                if (is_array($datosComanda)) {
+                /* Comanda aparte, que es la que armaba a mano el cajero con el
+                   boton que no cobraba. Ese boton ya no existe, asi que hoy esto
+                   solo entra si alguien llama a la API directo. Si ademas hay
+                   lineas marcadas, la comanda que ya salio arriba gana: si no,
+                   con las dos cosas mandadas a la vez se guardaban dos comandas
+                   para el mismo folio y la segunda tapaba a la primera. */
+                if (is_array($datosComanda) && $comandaId === null) {
                     $comandaId = guardarComanda($bd, $datosComanda, $ventaId, $folio, $total, $usuario);
                 }
 

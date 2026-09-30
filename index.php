@@ -105,7 +105,6 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
         </div>
         <div class="barra-rapida">
           <button class="btn sm" id="btn-rapido" title="Cargar al vuelo algo que no está en el catálogo. Se cobra con su precio y no descuenta stock.">+ Producto rápido</button>
-          <button class="btn sm" id="btn-comanda" title="Anotar qué hay que preparar y sacarle el papel a la cocina. No cobra: eso va aparte, en el carrito.">🍳 Comanda de cocina</button>
           <span class="fuente">Venta espontánea: se cobra, no se controla stock</span>
 
           <!-- La ayuda de teclas va acá y no en Ajustes: el que la necesita es
@@ -485,28 +484,23 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
 
         <div class="card">
           <div class="card-cab">
-            <h2>Atajos de la comanda</h2>
-            <button class="btn sm pri" id="btn-atajo-nuevo">+ Agregar atajo</button>
+            <h2>Comidas y Tragos</h2>
           </div>
           <p class="parrafo" style="margin:12px 16px 0">
-            Son los botones que el vendedor toca en el modal de delivery, para no tener que escribir.
-            Si a un atajo le asignás un producto del catálogo, ese producto <b>se cobra y descuenta
-            stock</b> como cualquier otra línea. Si no tiene producto, es solo texto para cocina.
+            Lo que come y toma la gente en el local o se lleva ya preparado no son
+            atajos sueltos: son <b>productos del catálogo</b>, en la categoría
+            <b>Comidas y Tragos</b>, con su precio. Se cargan y se cambian los
+            precios desde <b>Productos</b>, filtrando por esa categoría.
+            <br><br>
+            Todos van con <b>sin stock</b>, porque lo que se prepara no se descuenta:
+            se cobra y nada más. Como la categoría está marcada <i>va a cocina</i>,
+            toda línea que salga de ahí llega sola al papel de la cocina y el cajero
+            no tiene que marcar nada.
           </p>
-          <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
-            <table class="tabla tabla-ajustes">
-              <thead>
-                <tr>
-                  <th>Sección</th>
-                  <th>Botón</th>
-                  <th>Qué prepara</th>
-                  <th>Producto</th>
-                  <th class="acciones"></th>
-                </tr>
-              </thead>
-              <tbody id="atajos-tb"></tbody>
-            </table>
-          </div>
+          <p class="parrafo" style="margin:12px 16px">
+            Lo mismo vale para cualquier otro producto: si el cajero marca la 🍳
+            de una línea, esa línea va a la comanda, sea o no de esta categoría.
+          </p>
         </div>
 
         <div class="card">
@@ -611,76 +605,6 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
   eso el tipo arranca en "mesa" (consumo en el local) y los datos de
   entrega son opcionales.
 -->
-<div class="velo" id="m-comanda">
-  <div class="modal ancho">
-    <div class="modal-cab">
-      <h2>🍳 Comanda para cocina</h2>
-      <button class="cerrar" data-cerrar>✕</button>
-    </div>
-    <div class="modal-cue">
-
-      <div class="campo"><label>¿Dónde se consume?</label>
-        <div class="segmentos" id="com-tipo">
-          <button class="on" data-tipo="mesa">🍽 En el local</button>
-          <button data-tipo="delivery">🛵 Delivery</button>
-          <button data-tipo="retiro">🏠 Para llevar</button>
-        </div>
-      </div>
-
-      <div class="rejilla2 campos">
-        <div class="campo"><label>Nombre (opcional)</label>
-          <input id="com-cliente" placeholder="Si no, va como Mostrador" autocomplete="off"></div>
-        <div class="campo"><label>Mesa o lugar (opcional)</label>
-          <input id="com-lugar" placeholder="Mesa 4, barra, mostrador…" autocomplete="off"></div>
-      </div>
-
-      <div class="rejilla2 campos" id="com-zona-campos" hidden>
-        <div class="campo"><label>Zona (opcional)</label>
-          <select id="com-zona"><option value="">— sin zona —</option></select></div>
-        <div class="campo"><label>Costo del envío</label>
-          <input id="com-envio" type="text" value="$0.00" readonly tabindex="-1"></div>
-      </div>
-
-      <div class="campo" id="com-dir-campo" hidden><label>Dirección (opcional)</label>
-        <input id="com-direccion" placeholder="Calle, número, piso, referencia" autocomplete="off"></div>
-
-      <div class="campo"><label>Notas para cocina</label>
-        <input id="com-notas" placeholder="Sin cebolla, todo bien cocido…" autocomplete="off"></div>
-
-      <hr class="sep">
-
-      <div class="campo">
-        <label>Atajos
-          <button class="btn sm" id="com-btn-nuevo-atajo" data-solo-admin hidden>+ Nuevo atajo</button>
-        </label>
-        <div class="atajos" id="com-atajos"></div>
-      </div>
-
-      <div class="campo">
-        <label>O escribí algo a mano</label>
-        <div class="fila-agregar">
-          <input id="com-texto" placeholder="Ej: 6 huevos medio cocidos" autocomplete="off">
-          <span class="det" id="com-detalle-wrap" hidden>
-            <input id="com-detalle" placeholder="detalle (opcional)" autocomplete="off"></span>
-          <button class="btn" id="com-agregar-texto">Agregar</button>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>Lo que hay que preparar <span class="pill" id="com-count">0</span>
-          <button class="btn sm" id="com-traer-carrito" title="Copiar al carrito lo que ya está cargado, como líneas de cocina">↓ Traer del carrito</button>
-        </label>
-        <div class="del-items" id="com-items"></div>
-      </div>
-    </div>
-    <div class="modal-pie">
-      <button class="btn" data-cerrar>Cancelar</button>
-      <button class="btn" id="com-imprimir" disabled title="Imprimir el papel para llevárselo a la cocina">🖨 Imprimir</button>
-      <button class="btn pri" id="com-guardar">Guardar comanda</button>
-    </div>
-  </div>
-</div>
-
 <!-- ================= MODAL COBRO ================= -->
 <div class="velo" id="m-cobro">
   <div class="modal">
@@ -701,6 +625,16 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
         <div class="teclado" id="cob-teclado"></div>
         <div class="vuelto" id="cob-vuelto"><span>Entregado exacto</span><b>$0.00</b></div>
       </div>
+      <!-- Solo aparece si hay alguna linea marcada para comanda. Sin lineas
+           marcadas no se imprime ninguna comanda, asi que no hay por que
+           preguntarle el nombre a nadie. -->
+      <div class="campo" id="cob-comanda" hidden>
+        <label>Nombre de quien retira</label>
+        <input id="cob-retiro" placeholder="Si no, va como Mostrador" autocomplete="off">
+        <p class="parrafo" style="margin:6px 0 0;font-size:12.5px">
+          Sale impreso en el papel que se lleva la cocina y el pedido.
+        </p>
+      </div>
       <div id="cob-otro" style="display:none">
         <div class="campo"><label>Referencia (opcional)</label><input id="cob-ref" placeholder="Últimos 4 dígitos, autorización, etc."></div>
         <p class="parrafo" style="margin-top:12px; margin-bottom:0">
@@ -717,43 +651,6 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
 </div>
 
 <!-- ================= MODAL ATajo / ZONA ================= -->
-<div class="velo" id="m-atajo">
-  <div class="modal">
-    <div class="modal-cab"><h2 id="atk-titulo">Nuevo atajo</h2><button class="cerrar" data-cerrar>✕</button></div>
-    <div class="modal-cue">
-      <div class="rejilla2 campos">
-        <div class="campo"><label>Sección</label>
-          <input id="atk-seccion" list="atk-secciones" placeholder="Comidas" autocomplete="off">
-          <datalist id="atk-secciones">
-            <option value="Comidas"><option value="Bebidas"><option value="Tragos"><option value="Postres">
-          </datalist></div>
-        <div class="campo"><label>Botón (lo que ve el vendedor)</label>
-          <input id="atk-etiqueta" placeholder="1 pancho" autocomplete="off"></div>
-      </div>
-      <div class="campo"><label>Qué lee la cocina *</label>
-        <input id="atk-texto" placeholder="Pancho — hamburguesa completa" autocomplete="off"></div>
-      <div class="campo"><label>Detalle (opcional)</label>
-        <input id="atk-detalle" placeholder="con papas" autocomplete="off"></div>
-      <div class="campo"><label>Producto del catálogo (opcional)</label>
-        <select id="atk-producto"><option value="">— solo texto, no cobra —</option></select>
-        <p class="parrafo" style="margin:6px 0 0;font-size:12.5px">
-          Si elegís un producto, el atajo lo agrega al carrito: se cobra y descuenta stock.
-        </p>
-      </div>
-      <div class="rejilla2 campos">
-        <div class="campo"><label>Formato de venta (opcional)</label>
-          <select id="atk-formato"><option value="">— el predeterminado —</option></select></div>
-        <div class="campo"><label>Orden</label>
-          <input id="atk-orden" type="number" value="1"></div>
-      </div>
-    </div>
-    <div class="modal-pie">
-      <button class="btn" data-cerrar>Cancelar</button>
-      <button class="btn pri" id="atk-guardar">Guardar atajo</button>
-    </div>
-  </div>
-</div>
-
 <div class="velo" id="m-zona">
   <div class="modal" style="max-width:400px">
     <div class="modal-cab"><h2 id="zn-titulo">Nueva zona</h2><button class="cerrar" data-cerrar>✕</button></div>

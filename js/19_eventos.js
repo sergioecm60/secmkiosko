@@ -99,60 +99,6 @@ function conectar() {
 
   $("#btn-cobrar").addEventListener("click", abrirCobro);
 
-  /* --- comanda de cocina --- */
-  escuchar("#btn-comanda", "click", abrirComanda);
-
-  escuchar("#com-tipo", "click", e => {
-    const b = e.target.closest("button[data-tipo]");
-    if (!b) return;
-    comandaEnCurso.tipo = b.dataset.tipo;
-    $$("#com-tipo button").forEach(x => x.classList.toggle("on", x === b));
-    actualizarCamposComanda();
-    aplicarZona();
-  });
-
-  escuchar("#com-zona", "change", aplicarZona);
-
-  escuchar("#com-atajos", "click", async e => {
-    // El lapiz edita, la papelera borra, y el resto del boton usa el atajo.
-    // Si no se distinguen aca, tocar la papelera terminaria agregando una
-    // linea a la comanda.
-    const ed = e.target.closest("[data-editar-atajo]");
-    if (ed) { abrirAtajo(Number(ed.dataset.editarAtajo)); return; }
-    const bo = e.target.closest("[data-borrar-atajo-comanda]");
-    if (bo) { await borrarAtajo(Number(bo.dataset.borrarAtajoComanda)); return; }
-    const b = e.target.closest("[data-atajo]");
-    if (!b) return;
-    usarAtajo(b.dataset.atajo);
-  });
-
-  escuchar("#com-btn-nuevo-atajo", "click", () => abrirAtajo(0));
-
-  escuchar("#com-texto", "input", e => {
-    // El detalle aparece sólo cuando hay algo que detallar.
-    $("#com-detalle-wrap").hidden = !e.target.value.trim();
-  });
-
-  escuchar("#com-texto", "keydown", e => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    agregarTextoComanda();
-  });
-
-  escuchar("#com-agregar-texto", "click", agregarTextoComanda);
-
-  escuchar("#com-traer-carrito", "click", traerCarritoAComanda);
-
-  escuchar("#com-items", "click", e => {
-    const b = e.target.closest("[data-quitar-com]");
-    if (!b) return;
-    comandaEnCurso.items.splice(Number(b.dataset.quitarCom), 1);
-    renderItemsComanda();
-  });
-
-  escuchar("#com-guardar", "click", guardarComanda);
-  escuchar("#com-imprimir", "click", imprimirUltimaComanda);
-
   /* --- tablero de cocina --- */
   escuchar("#coc-filtros", "click", e => {
     const b = e.target.closest("button[data-coc]");
@@ -182,15 +128,8 @@ function conectar() {
     }
   });
 
-  /* --- ajustes de atajos y zonas --- */
-  escuchar("#btn-atajo-nuevo", "click", () => abrirAtajo(0));
+  /* --- ajustes de zonas --- */
   escuchar("#btn-zona-nueva", "click", () => abrirZona(0));
-  escuchar("#atajos-tb", "click", async e => {
-    const ed = e.target.closest("[data-edit-atajo]");
-    const bo = e.target.closest("[data-borrar-atajo]");
-    if (ed) abrirAtajo(Number(ed.dataset.editAtajo));
-    if (bo) await borrarAtajo(Number(bo.dataset.borrarAtajo));
-  });
   escuchar("#zonas-tb", "click", async e => {
     const ed = e.target.closest("[data-edit-zona]");
     const bo = e.target.closest("[data-borrar-zona]");
@@ -204,8 +143,6 @@ function conectar() {
       }
     }
   });
-  escuchar("#atk-producto", "change", refrescarFormatosAtajo);
-  escuchar("#atk-guardar", "click", guardarAtajo);
   escuchar("#zn-guardar", "click", guardarZona);
 
   /* --- categorias --- */

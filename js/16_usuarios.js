@@ -96,41 +96,17 @@ async function cambiarMiClave() {
   } catch (e) { aviso(e.message, "mal"); }
 }
 
-/* ---------- Ajustes: atajos y zonas ---------- */
+/* ---------- Ajustes: zonas ---------- */
 
 async function cargarAjustesCocina() {
   if (!esAdmin()) return;
-  const [a, z] = await Promise.all([
-    api("comanda_atajos").catch(() => ({ atajos: [] })),
-    api("zonas").catch(() => ({ zonas: [] }))
-  ]);
-  estado.atajos = a.atajos || [];
+  /* Los atajos de comanda se fueron: lo que va a la cocina son productos del
+     catalogo de la categoria "Comidas y Tragos", y se editan desde Productos.
+     Ya no hace falta traerlos ni tener una tabla propia en Ajustes. */
+  const z = await api("zonas").catch(() => ({ zonas: [] }));
   estado.zonas = z.zonas || [];
-  renderAjustesAtajos();
   renderAjustesZonas();
   renderAjustesCategorias();
-}
-
-function renderAjustesAtajos() {
-  const tb = $("#atajos-tb");
-  if (!tb) return;
-  if (!estado.atajos.length) {
-    tb.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted)">Todavía no hay atajos.</td></tr>';
-    return;
-  }
-  tb.innerHTML = estado.atajos.map(a => {
-    const p = a.producto_id ? prodPorId(a.producto_id) : null;
-    return `<tr>
-      <td>${esc(a.seccion)}</td>
-      <td><b>${esc(a.etiqueta)}</b></td>
-      <td>${esc(a.texto || "—")}${a.detalle ? ' <span class="fuente">(' + esc(a.detalle) + ")</span>" : ""}</td>
-      <td class="fuente">${p ? esc(p.nombre) + (a.formato_unidad ? " · " + esc(a.formato_unidad) : "") : '<span style="opacity:.6">sólo texto</span>'}</td>
-      <td class="acciones">
-        <button class="btn sm" data-edit-atajo="${a.id}" title="Editar">✎</button>
-        <button class="btn sm peligro" data-borrar-atajo="${a.id}" title="Borrar">🗑</button>
-      </td>
-    </tr>`;
-  }).join("");
 }
 
 function renderAjustesZonas() {
@@ -227,86 +203,7 @@ async function borrarCategoria(id) {
   } catch (e) { aviso(e.message, "mal"); }
 }
 
-let editAtajo = { id: 0, seccion: "", etiqueta: "", texto: "", detalle: "", producto_id: 0, formato_unidad: "", orden: 1 };
 let editZona = { id: 0, nombre: "", costo: 0 };
-
-function abrirAtajo(id) {
-  const a = id ? estado.atajos.find(x => x.id === id) : null;
-  editAtajo = a
-    ? { id: a.id, seccion: a.seccion, etiqueta: a.etiqueta, texto: a.texto || "", detalle: a.detalle || "", producto_id: a.producto_id || 0, formato_unidad: a.formato_unidad || "", orden: a.orden }
-    : { id: 0, seccion: "Comidas", etiqueta: "", texto: "", detalle: "", producto_id: 0, formato_unidad: "", orden: estado.atajos.length + 1 };
-
-  $("#atk-titulo").textContent = editAtajo.id ? "Editar atajo" : "Nuevo atajo";
-  $("#atk-seccion").value = editAtajo.seccion;
-  $("#atk-etiqueta").value = editAtajo.etiqueta;
-  $("#atk-texto").value = editAtajo.texto;
-  $("#atk-detalle").value = editAtajo.detalle;
-  $("#atk-orden").value = editAtajo.orden;
-
-  const sel = $("#atk-producto");
-  sel.innerHTML = '<option value="">— sólo texto, no cobra —</option>'
-    + estado.productos.filter(p => p.activo).map(p =>
-      '<option value="' + p.id + '">' + esc(p.nombre) + "</option>").join("");
-  sel.value = String(editAtajo.producto_id || 0);
-  refrescarFormatosAtajo();
-  abrirModal("#m-atajo");
-  setTimeout(() => $("#atk-etiqueta").focus(), 120);
-}
-
-function refrescarFormatosAtajo() {
-  const pid = Number($("#atk-producto").value) || 0;
-  const sel = $("#atk-formato");
-  const p = pid ? prodPorId(pid) : null;
-  const formatos = p ? (p.formatos_venta || []) : [];
-  sel.innerHTML = '<option value="">— el predeterminado —</option>'
-    + formatos.map(f => '<option value="' + esc(f.unidad) + '">' + esc(f.unidad) + " × " + numeroLocal(f.factor, 0) + "</option>").join("");
-  sel.value = editAtajo.formato_unidad || "";
-  sel.disabled = formatos.length === 0;
-}
-
-async function guardarAtajo() {
-  const datos = {
-    id: editAtajo.id,
-    seccion: $("#atk-seccion").value.trim() || "Comidas",
-    etiqueta: $("#atk-etiqueta").value.trim(),
-    texto: $("#atk-texto").value.trim(),
-    detalle: $("#atk-detalle").value.trim(),
-    producto_id: Number($("#atk-producto").value) || 0,
-    formato_unidad: $("#atk-formato").value || "",
-    orden: Number($("#atk-orden").value) || 0
-  };
-  try {
-    await api("atajo_guardar", datos);
-    cerrarModal("#m-atajo");
-    await cargarAjustesCocina();
-    if (estado.atajos.length) renderAtajos();
-    aviso("Atajo guardado.", "ok");
-  } catch (e) { aviso(e.message, "mal"); }
-}
-
-/**
- * Borra un atajo. Se usa desde el panel de la comanda y desde Ajustes, asi
- * que el aviso aclara que se pierde el boton pero no el producto del
- * catalogo, que es lo que la gente suele temer.
- */
-async function borrarAtajo(id) {
-  const a = estado.atajos.find(x => x.id === Number(id));
-  if (!a) { aviso("Ese atajo ya no existe.", "aviso-w"); return; }
-  const conProducto = !!a.producto_id;
-  const ok = await confirmar(
-    'Borrar el atajo "' + a.etiqueta + '"',
-    conProducto
-      ? 'Desaparece el botón de la comanda. El producto del catálogo no se borra ni se toca su stock.'
-      : 'Desaparece el botón de la comanda. No tiene producto del catálogo asociado.'
-  );
-  if (!ok) return;
-  try {
-    await api("atajo_borrar", { id: Number(id) });
-    await cargarAjustesCocina();
-    renderAtajos();
-    aviso('Atajo "' + a.etiqueta + '" borrado.', "ok");
-  } catch (e) { aviso(e.message, "mal"); }
-}
 
 function abrirZona(id) {
   const z = id ? estado.zonas.find(x => x.id === id) : null;

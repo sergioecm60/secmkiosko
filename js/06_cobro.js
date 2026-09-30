@@ -27,6 +27,7 @@ function abrirCobro() {
 
   $("#cob-total").textContent = dinero(tot);
   $("#cob-ref").value = "";
+  $("#cob-retiro").value = "";
   refrescarCobro();
 
   // Sugerencias de dinero: exacto y billetes redondo hacia arriba
@@ -41,12 +42,19 @@ function abrirCobro() {
 }
 
 function refrescarCobro() {
-  const tot = totalCarrito();
-  const metodo = estado.mediosPago.find(m => m.nombre === estado.metodoCobro);
-  const efectivo = metodo ? !!metodo.efectivo : true;
-  $("#cob-efectivo").style.display = efectivo ? "" : "none";
-  $("#cob-otro").style.display = efectivo ? "none" : "";
-  if (!efectivo) { $("#cob-confirmar").disabled = false; return; }
+    const tot = totalCarrito();
+    const metodo = estado.mediosPago.find(m => m.nombre === estado.metodoCobro);
+    const efectivo = metodo ? !!metodo.efectivo : true;
+    $("#cob-efectivo").style.display = efectivo ? "" : "none";
+    $("#cob-otro").style.display = efectivo ? "none" : "";
+
+    /* El nombre de quien retira solo se pregunta cuando hay lineas marcadas.
+       Si no hay ninguna marcada no se imprime ninguna comanda, asi que el
+       campo no tendria en que ir. */
+    $("#cob-comanda").hidden = lineasDeCocina().length === 0;
+
+    if (!efectivo) { $("#cob-confirmar").disabled = false; return; }
+
 
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
   const dif = r2(recibido - tot);
@@ -82,10 +90,10 @@ async function confirmarVenta() {
   const efectivo = metodo ? !!metodo.efectivo : true;
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
 
-  // La comanda NO viaja con la venta: ya se guardó sola, con su propio
-  // botón. Acá sólo se cobra el carrito.
   // Si hay algo para cocina, la comanda sale sola con el cobro: se arma en el
-  // servidor con las lineas marcadas y queda atada a este folio.
+  // servidor con las lineas marcadas y queda atada a este folio. El nombre de
+  // quien retira viaja en comanda_cliente; si no se escribe, el servidor le
+  // pone "Mostrador".
   const hayCocina = lineasDeCocina().length > 0;
   try {
     const r = await api("venta_crear", {
@@ -95,7 +103,8 @@ async function confirmarVenta() {
       medio_pago_id: metodo ? metodo.id : 0,
       recibido: efectivo ? recibido : -1,
       vuelto: efectivo ? r2(recibido - totalCarrito()) : 0,
-      referencia: $("#cob-ref").value.trim()
+      referencia: $("#cob-ref").value.trim(),
+      comanda_cliente: hayCocina ? $("#cob-retiro").value.trim() : ""
     });
 
     cerrarModal("#m-cobro");
@@ -113,7 +122,6 @@ async function confirmarVenta() {
     // El papel de la cocina sale apenas se cobra, sin que el cajero tenga que
     // pedirlo. Si el navegador no puede imprimir, igual queda en el tablero.
     if (r.comanda_id) {
-      ultimaComanda = { id: r.comanda_id };
       try { imprimirComanda(r.comanda_id); }
       catch (e) { aviso("Cobrado. La comanda quedó en el tablero de cocina.", "aviso-w"); }
     }
@@ -129,252 +137,19 @@ async function confirmarVenta() {
 
 /* =====================================================================
    6b. COMANDAS DE COCINA
-   La comanda es el papel para la cocina y va SEPARADA del cobro: el cajero
-   carga los productos y cobra en el carrito (de ahi sale el remito), y aparte
-   saca la comanda con lo que hay que preparar. Para consumo en el local no
-   hay que completar nada: el tipo arranca en "En el local" y los datos de
-   entrega son opcionales.
-   ===================================================================== */
+       La comanda es el papel para la cocina. Ya NO se arma a mano en un modal
+       aparte: cada linea del ticket tiene su 🍳, y al cobrar el servidor arma
+       sola la comanda con las marcadas y la ata al folio. Si no hay ninguna
+       linea marcada no se imprime ninguna comanda, y en el cobro no se pide
+       ningun nombre.
+       ===================================================================== */
+
 const ETIQUETA_TIPO = { delivery: "🛵 Delivery", retiro: "🏠 Para llevar", mesa: "🍽 En el local" };
 const ETIQUETA_ESTADO = {
   pendiente: "Nueva", preparando: "Preparando", listo: "Lista",
   entregado: "Entregada", cancelado: "Cancelada"
 };
 
-/* ---------- Comanda de cocina (el papel, no la venta) ---------- */
-
-/** La comanda que se está armando. Vive en memoria hasta que se guarda. */
-let comandaEnCurso = null;
-
-/** La última comanda guardada, para poder sacarle otra copia de inmediato. */
-let ultimaComanda = null;
-
-function abrirComanda() {
-  if (!comandaEnCurso) {
-    comandaEnCurso = {
-      cliente: "", direccion: "", zona_id: 0, envio: 0,
-      tipo: "mesa", lugar: "", notas: "", items: []
-    };
-  }
-  const c = comandaEnCurso;
-  $("#com-cliente").value = c.cliente || "";
-  $("#com-lugar").value = c.lugar || "";
-  $("#com-direccion").value = c.direccion || "";
-  $("#com-notas").value = c.notas || "";
-  $("#com-texto").value = "";
-  $("#com-detalle").value = "";
-  $("#com-detalle-wrap").hidden = true;
-  $$("#com-tipo button").forEach(b => b.classList.toggle("on", b.dataset.tipo === c.tipo));
-  actualizarCamposComanda();
-  renderZonas();
-  renderAtajos();
-  renderItemsComanda();
-  // Si ya se guardó alguna comanda en esta sesión, se puede sacar otra copia
-  // sin volver a armarla.
-  $("#com-imprimir").disabled = !ultimaComanda;
-  abrirModal("#m-comanda");
-}
-
-/** Muestra sólo los campos que aplican al tipo de pedido elegido. */
-function actualizarCamposComanda() {
-  const t = comandaEnCurso.tipo;
-  $("#com-zona-campos").hidden = t !== "delivery";
-  $("#com-dir-campo").hidden = t !== "delivery";
-}
-
-function renderZonas() {
-  const sel = $("#com-zona");
-  const id = String(comandaEnCurso.zona_id || 0);
-  sel.innerHTML = '<option value="0">— sin zona —</option>'
-    + estado.zonas.map(z => '<option value="' + z.id + '">' + esc(z.nombre) + " — " + dinero(z.costo) + "</option>").join("");
-  sel.value = id;
-  aplicarZona();
-}
-
-/** El costo sale de la zona configurada; el navegador no lo puede cambiar. */
-function aplicarZona() {
-  const c = comandaEnCurso;
-  const id = Number($("#com-zona").value) || 0;
-  c.zona_id = id;
-  const z = estado.zonas.find(x => x.id === id);
-  // El envío de la comanda es sólo informativo: el cobro va aparte.
-  c.envio = c.tipo === "delivery" && z ? Number(z.costo) || 0 : 0;
-  $("#com-envio").value = dinero(c.envio);
-}
-
-/* ---------- Atajos ---------- */
-
-function renderAtajos() {
-  // Crear y editar atajos es del administrador; el cajero sólo los usa.
-  const btnNuevo = $("#com-btn-nuevo-atajo");
-  if (btnNuevo) btnNuevo.hidden = !estado.esAdmin;
-  if (!estado.atajos.length) {
-    $("#com-atajos").innerHTML = estado.esAdmin
-      ? '<p class="parrafo" style="margin:0">No hay atajos cargados. Usá "+ Nuevo atajo".</p>'
-      : '<p class="parrafo" style="margin:0">No hay atajos cargados.</p>';
-    return;
-  }
-  // Se agrupan por sección, en el orden en que vinieron.
-  const secciones = [];
-  estado.atajos.forEach(a => {
-    if (!secciones.some(s => s.nombre === a.seccion)) secciones.push({ nombre: a.seccion, lista: [] });
-    secciones.find(s => s.nombre === a.seccion).lista.push(a);
-  });
-  $("#com-atajos").innerHTML = secciones.map(s => `
-    <div class="atajo-sec"><span class="t">${esc(s.nombre)}</span><span class="ln"></span></div>
-    <div class="atajo-botones">${s.lista.map(a => `
-      <span class="atajo-grupo">
-        <button class="atajo" data-atajo="${a.id}"
-                title="${esc(a.texto || "")}${a.detalle ? " · " + esc(a.detalle) : ""}">
-          ${esc(a.etiqueta)}
-        </button>
-        ${estado.esAdmin ? `<button class="atajo-ed" data-editar-atajo="${a.id}"
-                title="Editar este atajo">✎</button>
-              <button class="atajo-borrar" data-borrar-atajo-comanda="${a.id}"
-                title="Borrar este atajo">🗑</button>` : ""}
-      </span>`).join("")}</div>`).join("");
-}
-
-/**
- * Un atajo agrega una línea a la comanda y nada más. No toca el carrito: el
- * cobro es otro paso, así que meter un producto acá cobraría de más.
- */
-function usarAtajo(id) {
-  const a = estado.atajos.find(x => x.id === Number(id));
-  if (!a) return;
-  let texto = a.texto;
-  if (!texto && a.producto_id) {
-    const p = prodPorId(a.producto_id);
-    texto = p ? p.nombre : "";
-  }
-  if (!texto) { aviso("Ese atajo no tiene texto para la comanda.", "mal"); return; }
-  agregarItemComanda({
-    texto, detalle: a.detalle || null,
-    producto_id: a.producto_id || 0, cantidad: 1
-  });
-}
-
-function agregarItemComanda(item) {
-  if (!comandaEnCurso) return;
-  // Si la línea ya está anotada se acumula en vez de repetirla: dos "6
-  // huevos" son una línea con cantidad 2, no dos renglones en el papel.
-  // norm() pasa a minúsculas pero NO saca los espacios de los bordes, así
-  // que acá se limpian: "6 HUEVOS " y " 6 huevos" son la misma línea.
-  const clave = s => norm(s == null ? "" : String(s)).trim().replace(/\s+/g, " ");
-  const igual = comandaEnCurso.items.find(it =>
-    (it.producto_id || 0) === (item.producto_id || 0)
-    && clave(it.texto) === clave(item.texto)
-    && clave(it.detalle || "") === clave(item.detalle || ""));
-  if (igual) {
-    igual.cantidad = (Number(igual.cantidad) || 0) + (Number(item.cantidad) || 1);
-  } else {
-    comandaEnCurso.items.push({
-      texto: item.texto, detalle: item.detalle || null,
-      producto_id: item.producto_id || 0, cantidad: Number(item.cantidad) || 1
-    });
-  }
-  renderItemsComanda();
-}
-
-/* ---------- Lineas de la comanda ---------- */
-
-function renderItemsComanda() {
-  const items = comandaEnCurso ? comandaEnCurso.items : [];
-  $("#com-count").textContent = items.length;
-  $("#com-guardar").disabled = items.length === 0;
-  if (!items.length) {
-    $("#com-items").innerHTML = '<div class="del-vacio">Todavía no hay nada que preparar.<br>'
-      + 'Traé el pedido del carrito, tocá un atajo o escribí una línea.</div>';
-    return;
-  }
-  $("#com-items").innerHTML = items.map((it, i) => `
-    <div class="del-item">
-      <span class="n">${it.cantidad}</span>
-      <span class="c"><b>${esc(it.texto)}</b>${it.detalle ? '<span class="d">' + esc(it.detalle) + "</span>" : ""}</span>
-      <button class="quitar" data-quitar-com="${i}" title="Sacar de la comanda">✕</button>
-    </div>`).join("");
-}
-
-/** Escribe una línea a mano para la comanda. */
-function agregarTextoComanda() {
-  const texto = $("#com-texto").value.trim();
-  if (!texto) return;
-  agregarItemComanda({
-    texto, detalle: $("#com-detalle").value.trim(),
-    producto_id: 0, cantidad: 1
-  });
-  $("#com-texto").value = "";
-  $("#com-detalle").value = "";
-  $("#com-detalle-wrap").hidden = true;
-  $("#com-texto").focus();
-}
-
-/** Trae el carrito a la comanda: es lo que el cajero ya está por cobrar. */
-function traerCarritoAComanda() {
-  if (!comandaEnCurso) return;
-  if (!estado.carrito.length) {
-    aviso("El carrito está vacío: cargá algo antes de armar la comanda.", "aviso-w");
-    return;
-  }
-  estado.carrito.forEach(l => {
-    agregarItemComanda({
-      texto: l.formato_unidad ? l.nombre + " (" + l.formato_unidad + ")" : l.nombre,
-      detalle: null,
-      producto_id: l.id,
-      cantidad: Number(l.cantidad) || 1
-    });
-  });
-  aviso("Se pasó el carrito a la comanda.", "ok");
-}
-
-/* ---------- Guardar e imprimir ---------- */
-
-function leerCamposComanda() {
-  const c = comandaEnCurso;
-  c.cliente   = $("#com-cliente").value.trim();
-  c.lugar     = $("#com-lugar").value.trim();
-  c.direccion = $("#com-direccion").value.trim();
-  c.notas     = $("#com-notas").value.trim();
-}
-
-/** Guarda la comanda sola: no cobra nada. El remito sale del carrito. */
-function guardarComanda() {
-  if (!comandaEnCurso) { aviso("No hay ninguna comanda armada.", "mal"); return; }
-  leerCamposComanda();
-  const c = comandaEnCurso;
-  if (!c.items.length) {
-    aviso("Anotá al menos una cosa para preparar.", "mal");
-    return;
-  }
-  api("comanda_crear", {
-    tipo: c.tipo, cliente: c.cliente, lugar: c.lugar,
-    direccion: c.direccion, zona_id: c.zona_id || 0, notas: c.notas,
-    items: c.items.map(it => ({
-      texto: it.texto, detalle: it.detalle,
-      producto_id: it.producto_id || 0, cantidad: it.cantidad
-    }))
-  }).then(r => {
-    ultimaComanda = r.comanda;
-    // Ya quedó en la base: si el cajero sigue cargando, arranca otra.
-    comandaEnCurso = null;
-    cerrarModal("#m-comanda");
-    $("#com-imprimir").disabled = false;
-    // El cajero se la lleva a la cocina: lo natural es printable ahí mismo.
-    if (ultimaComanda) {
-      confirmar(
-        "Comanda #" + r.comanda.id + " guardada",
-        "¿La imprimís ahora para llevársela a la cocina? Si no, la sacás "
-        + "de nuevo desde el botón Imprimir."
-      ).then(ok => { if (ok) imprimirComanda(r.comanda.id); });
-    }
-  }).catch(e => aviso(e.message, "mal"));
-}
-
-/** Imprime el papel de la última comanda guardada, sin volver a armarlo. */
-function imprimirUltimaComanda() {
-  if (!ultimaComanda) { aviso("Todavía no guardaste ninguna comanda.", "mal"); return; }
-  imprimirComanda(ultimaComanda.id);
-}
 /** El precio de la comanda de texto libre no se cobra: es sólo instrucción. */
 function itemsParaVenta() {
   return estado.carrito.map(l => ({
@@ -587,7 +362,7 @@ function imprimirComanda(id) {
       ${datos.length ? '<div class="tc-datos">' + datos.join("<br>") + "</div>" : ""}
       ${c.notas ? '<div class="tc-obs">⚠ ' + esc(c.notas) + "</div>" : ""}
       <table class="tc-l">${filas}</table>
-      <div class="tc-pie">Pedido folio ${c.folio || "—"} · pagado<br>${esc(estado.config.negocio || "")}</div>`;
+      <div class="tc-pie">Pedido folio ${c.folio || "—"} · <b>YA COBRADO</b><br>Entregar sin volver a cobrar nada<br>${esc(estado.config.negocio || "")}</div>`;
     imprimirTicketAhora("comanda");
   }).catch(e => aviso("No se pudo imprimir: " + e.message, "mal"));
 }

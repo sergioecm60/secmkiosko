@@ -498,10 +498,7 @@ $permisos = [
     'comanda_crear'     => ROL_VENTA,
     'comanda_estado'    => ROL_AUTENTICADO,
     'comanda_item'      => ROL_AUTENTICADO,
-    'comanda_atajos'    => ROL_AUTENTICADO,
     'zonas'             => ROL_AUTENTICADO,
-    'atajo_guardar'     => ROL_ADMIN,
-    'atajo_borrar'      => ROL_ADMIN,
     'zona_guardar'      => ROL_ADMIN,
     'zona_borrar'       => ROL_ADMIN,
     'categoria_guardar' => ROL_ADMIN,
@@ -792,10 +789,7 @@ try {
         case 'comanda':
         case 'comanda_crear':
         case 'comanda_estado':
-        case 'comanda_item':
-        case 'comanda_atajos':
-        case 'atajo_guardar':
-        case 'atajo_borrar': {
+        case 'comanda_item': {
             require __DIR__ . '/api/rutas/comandas.php';
             break;
         }

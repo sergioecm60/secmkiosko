@@ -23,7 +23,6 @@ const estado = {
   soyCocina: document.body.getAttribute("data-rol") === "cocina",
   miRol: document.body.getAttribute("data-rol") || "vendedor",
   esAdmin: document.body.getAttribute("data-rol") === "admin",
-  atajos: [],
   zonas: [],
   categorias: [],
   categoriasUsadas: {},
