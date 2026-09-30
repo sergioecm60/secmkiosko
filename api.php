@@ -491,11 +491,10 @@ $permisos = [
     'clave_cambiar'     => ROL_AUTENTICADO,
 
     // Comandas: las ve y las mueve cualquiera (incluido el de cocina).
-    // Crearlas ya no es parte del cobro: el cajero arma la comanda por su
-    // cuenta, asi que alcanza con que pueda vender.
+    // Crearlas ya no es parte del cobro: la comanda sale del cobro, atada a
+    // la venta. Quedan solo las que se leen y las que la cocina tacha.
     'comandas'          => ROL_AUTENTICADO,
     'comanda'           => ROL_AUTENTICADO,
-    'comanda_crear'     => ROL_VENTA,
     'comanda_estado'    => ROL_AUTENTICADO,
     'comanda_item'      => ROL_AUTENTICADO,
     'zonas'             => ROL_AUTENTICADO,
@@ -787,7 +786,6 @@ try {
            ============================================================ */
         case 'comandas':
         case 'comanda':
-        case 'comanda_crear':
         case 'comanda_estado':
         case 'comanda_item': {
             require __DIR__ . '/api/rutas/comandas.php';
