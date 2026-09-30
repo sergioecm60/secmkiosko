@@ -390,3 +390,57 @@ Si alguna vez se subió un respaldo real por error, el procedimiento está en
 | `Enter` | Agregar el producto buscado |
 | `F4` | Abrir el cobro |
 | `Esc` | Cerrar ventana, limpiar búsqueda, borrar lo tipeado en el cobro |
+
+---
+
+## 8. Trabajo en equipo con git
+
+Más de una persona (o más de una sesión) trabaja sobre este repo al mismo tiempo. El
+código se empuja seguido, así que **hay que traer lo del remoto antes de editar, no
+después de terminar.**
+
+### El orden correcto
+
+```bash
+git fetch origin          # ver si el remoto se movió
+git rebase origin/main    # si se movió, traérselo ANTES de editar
+# ... recién acá tocar archivos ...
+git commit
+git push origin main
+```
+
+### Por qué importa tanto
+
+Porque el remoto se mueve mientras uno está trabajando. Pasó esto: se empezó a tocar la
+cabecera sobre `estilos.css`, y mientras tanto el otro lado pushed seis commits que
+partieron el proyecto en `api/rutas/`, `js/`, `inc/` y `css/`. Al final el `push` fue
+rechazado y había que rebasar un commit escrito contra un archivo que ya no existía en
+esa ruta.
+
+Si en lugar de eso se hubiera seguido diez minutos más, se estaría editando `app.js` un
+archivo que ya había sido partido en 21 módulos.
+
+### Reglas
+
+- **Nunca `git push --force`.** Si el push es rechazado, es porque el otro lado trabajó.
+  Rebasear, no pisar.
+- **Commits chicos y frecuentes.** Un commit por tema. Si se trabaja media hora, se hace push.
+  Un commit gigante es lo que hace que un rebase sea una pesadilla.
+- **Antes de un cambio grande** (mover archivos, renombrar, partir un módulo): `git fetch`,
+  y si el remoto se movió, rebasear **primero**.
+- **Si un archivo fue movido o renombrado**, el `git rebase` lo detecta solo y aplica los
+  cambios sobre la ruta nueva. Conviene verificar después que el cambio quedó donde debe.
+- **Nunca compartir credenciales.** El push va por autenticación del navegador (GCM).
+- Si un `push` es rechazado, primero `git log --oneline main..origin/main` para ver qué
+  hay del otro lado. No asumir que es basura.
+
+### Antes de dar por terminado un cambio
+
+```bash
+git status -sb              # tiene que decir main...origin/main, sin nada pendiente
+git log --oneline -5        # confirmar que el historial está como corresponde
+```
+
+Y si el cambio tocó el armado (mover o partir archivos), cargar la app en el navegador y
+confirmar que no rompió nada: que abra, que la consola JavaScript esté limpia y que las
+vistas principales dibujen.
