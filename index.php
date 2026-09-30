@@ -618,14 +618,16 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
         <div class="teclado" id="cob-teclado"></div>
         <div class="vuelto" id="cob-vuelto"><span>Entregado exacto</span><b>$0.00</b></div>
       </div>
-      <!-- Solo aparece si hay alguna linea marcada para comanda. Sin lineas
-           marcadas no se imprime ninguna comanda, asi que no hay por que
-           preguntarle el nombre a nadie. -->
-      <div class="campo" id="cob-comanda" hidden>
-        <label>Nombre de quien retira</label>
-        <input id="cob-retiro" placeholder="Si no, va como Mostrador" autocomplete="off">
-        <p class="parrafo" style="margin:6px 0 0;font-size:12.5px">
-          Sale impreso en el papel que se lleva la cocina y el pedido.
+      <!-- Un solo campo de nombre para toda la venta. Antes solo aparecia
+           cuando habia lineas de cocina y se guardaba en la comanda, asi que
+           las ventas de gondola quedaban sin saber a quien se le habia cobrado.
+           Ahora va siempre y se guarda en la venta; si hay algo para cocina el
+           mismo nombre es el que retira. Opcional: vacio es Mostrador. -->
+      <div class="campo" id="cob-cliente-campo">
+        <label>Cliente</label>
+        <input id="cob-cliente" placeholder="Opcional. Si no, queda como Mostrador" autocomplete="off">
+        <p class="parrafo" style="margin:6px 0 0;font-size:12.5px" hidden>
+          Hay cosas para la cocina, as&iacute; que este nombre es el que retira.
         </p>
       </div>
       <div id="cob-otro" style="display:none">

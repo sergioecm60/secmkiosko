@@ -263,12 +263,14 @@ async function verCaja(id) {
       }).join("")
       + "</tbody></table>"
       + '<h3 style="font-size:13px;margin:16px 0 7px">Ventas del turno (' + r.ventas.length + ")</h3>"
-      + '<div style="max-height:220px;overflow:auto"><table class="tabla-mp"><tbody>'
+      + '<div style="max-height:220px;overflow:auto"><table class="tabla-mp">'
+      + "<thead><tr><th>Folio</th><th>Hora</th><th>M&eacute;todo</th><th>Cliente</th><th class='num'>Total</th></tr></thead><tbody>"
       + r.ventas.map(v =>
         "<tr><td>#" + v.folio + "</td>"
         + '<td class="fuente" style="font-size:12px">' + esc(fechaHora(v.fecha)) + "</td>"
         + "<td>" + esc(v.metodo) + (v.referencia ? ' <span class="fuente">(' + esc(v.referencia) + ")</span>" : "") + "</td>"
-        + (v.anulada ? '<td><span class="etq mal">anulada</span></td>' : "")
+        + "<td>" + (v.cliente ? esc(v.cliente) : '<span class="fuente">Mostrador</span>')
+        + (v.anulada ? ' <span class="etq mal">anulada</span>' : "") + "</td>"
         + '<td class="num"><b>' + dinero(v.total) + "</b></td></tr>").join("")
       + "</tbody></table></div>";
 

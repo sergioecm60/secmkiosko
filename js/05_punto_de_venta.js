@@ -69,10 +69,15 @@ function renderGrid() {
     // "sin stock": el producto se cobra siempre.
     const libre = !!p.sin_stock;
     const e = estadoStock(p);
+    /* Un producto de almacen sin existencias no se puede vender, asi que se
+       muestra como tal. Lo mismo con el que todavia no tiene precio cargado:
+       se puede ver, pero todavia no se puede cobrar. */
+    const noVensible = libre ? false
+      : (p.stock <= 0 ? "sin stock" : (Number(p.precio) <= 0 ? "sin precio" : ""));
     const marca = libre ? '<span class="marca libre">a pedido</span>'
-      : (p.stock <= 0 ? '<span class="marca">agotado</span>'
+      : (noVensible ? '<span class="marca">' + noVensible + "</span>"
       : (p.minimo > 0 && p.stock <= p.minimo ? '<span class="marca bajo">bajo</span>' : ""));
-    return `<div class="prod${!libre && p.stock <= 0 ? " sin-stock" : ""}" data-prod="${p.id}" title="${esc(p.nombre)}">
+    return `<div class="prod${noVensible ? " sin-stock" : ""}" data-prod="${p.id}" title="${esc(p.nombre)}">
       ${marca}
       ${fotoHTML(p, "foto")}
       <div class="nom">${esc(p.nombre)}</div>

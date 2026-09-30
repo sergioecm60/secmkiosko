@@ -137,6 +137,7 @@ function conectar() {
     const btnEstado = e.target.closest("[data-estado-com]");
     const btnItem   = e.target.closest("[data-item-com]");
     const btnPrint  = e.target.closest("[data-print-com]");
+    const btnVenta  = e.target.closest("[data-print-com-venta]");
     try {
       if (btnEstado) {
         const art = btnEstado.closest("[data-comanda]");
@@ -146,7 +147,9 @@ function conectar() {
         btnItem.disabled = true;
         await marcarItem(Number(btnItem.dataset.itemCom));
       } else if (btnPrint) {
-        imprimirComanda(Number(btnPrint.dataset.printCom));
+        imprimirComanda(Number(btnPrint.dataset.printCom), "cocina");
+      } else if (btnVenta) {
+        imprimirComanda(Number(btnVenta.dataset.printComVenta), "venta");
       }
     } catch (err) {
       aviso(err.message, "mal");
@@ -171,12 +174,19 @@ function conectar() {
     if (bo) borrarCategoria(Number(bo.dataset.borrarCat));
   });
 
-  /* --- cobro --- */
-  $$("#cob-metodos .metodo").forEach(b => b.addEventListener("click", () => {
+  /* --- cobro ---
+     El listener va por delegacion sobre #cob-metodos y no sobre cada boton:
+     abrirCobro() reemplaza el innerHTML con los metodos que trae la base, asi
+     que los botones nuevos nacen sin listener si se engancha boton por boton.
+     Eso dejaba la UI clavada en Efectivo y hacia parecer que solo se podia
+     cobrar exacto. */
+  $("#cob-metodos").addEventListener("click", e => {
+    const b = e.target.closest(".metodo");
+    if (!b) return;
     estado.metodoCobro = b.dataset.m;
     $$("#cob-metodos .metodo").forEach(x => x.classList.toggle("on", x === b));
     refrescarCobro();
-  }));
+  });
 
   $("#cob-billetes").addEventListener("click", e => {
     const b = e.target.closest("[data-billete]");

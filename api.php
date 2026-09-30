@@ -283,6 +283,7 @@ function venta(array $f): array
         'vuelto'     => $f['vuelto'] === null ? null : (float) $f['vuelto'],
         'referencia' => $f['referencia'] ?? '',
         'nota'       => $f['nota'] ?? '',
+        'cliente'    => $f['cliente'] ?? '',
         'anulada'    => (int) $f['anulada'] === 1,
         'motivo'     => $f['motivo'] ?? '',
     ];

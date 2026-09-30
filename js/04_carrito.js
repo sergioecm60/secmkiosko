@@ -19,13 +19,25 @@ function agregar(id, cantidad, formatoId) {
   }
   const factor = fmt ? (Number(fmt.factor) || 1) : 1;
   const precio = fmt && Number(fmt.precio_final) > 0 ? Number(fmt.precio_final) : p.precio;
+  if (Number(precio) <= 0) {
+    aviso("Este producto no tiene precio asignado. No se puede vender.", "mal");
+    return;
+  }
   const baseCant = r2(cantidad * factor);
   const formatoIdFinal = fmt ? fmt.id : 0;
 
-  // La venta libre no lleva control de existencias: no se agota y no avisa.
+  /* La venta libre no lleva control de existencias: un trago o un sándwich se
+     prepara y no sale de un estante, asi que nunca se agota. Un producto de
+     almacen, en cambio, sin stock no se vende: antes se avisaba y se dejaba
+     pasar, la venta se cobraba y el stock quedaba en negativo para siempre. */
   if (!p.sin_stock) {
-    if (p.stock <= 0) aviso("⚠️ " + p.nombre + " está agotado. Se registra igual y el stock queda en negativo.", "aviso-w");
-    else if (p.minimo > 0 && p.stock - baseCant <= p.minimo) {
+    if (p.stock - baseCant < 0) {
+      aviso(p.stock <= 0
+        ? p.nombre + " está agotado. No se puede vender."
+        : "Solo quedan " + cantidadTxt(p.stock, p.unidad) + " de " + p.nombre + ".", "mal");
+      return;
+    }
+    if (p.minimo > 0 && p.stock - baseCant <= p.minimo) {
       aviso("Quedan solo " + cantidadTxt(p.stock, p.unidad) + " de " + p.nombre + ".", "aviso-w");
     }
   }

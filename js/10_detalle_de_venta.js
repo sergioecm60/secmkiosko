@@ -78,6 +78,7 @@ function imprimirTicket(v) {
     <div class="t-l">
       <tr><td>Folio</td><td class="d">#${v.folio}</td></tr>
       <tr><td>Fecha</td><td class="d">${fechaHora(v.fecha)}</td></tr>
+      ${v.cliente ? "<tr><td>Cliente</td><td class='d'>" + esc(v.cliente) + "</td></tr>" : ""}
     </div>
     <div class="t-l" style="margin-top:6px">${lineas}</div>
     <div class="t-tot t-l">

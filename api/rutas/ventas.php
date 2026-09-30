@@ -56,11 +56,20 @@ case 'venta_crear': {
             $usuario   = nombreUsuario();
             $datosComanda = p('comanda');
 
+            /* A quien se le cobro. Va siempre en la venta, sea con cocina o sin
+               cocina, para que el corte de caja sepa a quien se le cobro cada
+               venta. Es opcional: vacio se guarda como NULL y se lee como
+               Mostrador, que en un kiosco es lo mas comun. */
+            $cliente = pTxt('cliente', 80);
+
             /* Nombre de quien retira. Antes la comanda se llenaba sola con el
                campo "referencia" del cobro, que es para los ultimos 4 digitos o
                el numero de autorizacion: en la practica la comanda salia
-               siempre como "Mostrador" y el nombre no se pedia en ningun lado. */
-            $nombreRetiro = pTxt('comanda_cliente', 80);
+               siempre como "Mostrador" y el nombre no se pedia en ningun lado.
+               Ahora hay un solo campo en el cobro: si hay algo para cocina y el
+               cajero escribio un nombre, ese mismo nombre es el que retira. */
+            $nombreRetiro = $cliente;
+            if ($nombreRetiro === '') $nombreRetiro = pTxt('comanda_cliente', 80);
             if ($nombreRetiro === '') $nombreRetiro = 'Mostrador';
 
             // El costo del reparto se resuelve de la zona configurada antes de
@@ -144,19 +153,34 @@ case 'venta_crear': {
                     }
 
                     $baseCant = redondear($cant * $factor);
+                    /* Un producto de almacen necesita existencias: si esta
+                       agotado no se vende. Los de venta libre (sin_stock) no
+                       entran en esta regla porque no llevan control de stock:
+                       un trago o un sándwich se prepara, no se descuenta de un
+                       estante. Antes se dejaba vender en negativo y despues se
+                       avisaba con un "quedo en negativo" que llegaba tarde: el
+                       stock ya estaba restado y la venta ya cobrada. */
+                    if ((int) ($pr['sin_stock'] ?? 0) !== 1
+                        && redondear((float) $pr['stock']) - $baseCant < 0) {
+                        throw new RuntimeException(
+                            '"' . (string) $pr['nombre'] . '" esta agotado. No hay stock para vender.'
+                        );
+                    }
                     // El precio sale del formato o del producto, nunca del
-                    // navegador: si no hay nada configurado se cae al precio
-                    // que envio el cliente para no dejar la linea en cero.
+                    // navegador. Antes, si el producto no tenia precio, caia al
+                    // que mandaba el cliente "para no dejar la linea en cero":
+                    // eso vendia a $0 sin avisar y ademas dejaba que cualquiera
+                    // se pusiera el precio que quisiera. Un producto sin precio
+                    // no se vende: no hay nada que cobrar.
                     $precio = $formato !== null
                         ? precioVentaDe($formato, (float) ($pr['costo'] ?? 0), (float) ($pr['precio'] ?? 0))
                         : (float) $pr['precio'];
-                    if ($precio <= 0.0 && isset($it['precio']) && is_numeric($it['precio'])) {
-                        $precio = (float) $it['precio'];
+                    if ($precio <= 0.0) {
+                        throw new RuntimeException(
+                            '"' . (string) $pr['nombre'] . '" no tiene precio asignado. No se puede vender.'
+                        );
                     }
                     $precio = redondear($precio);
-                    if ($precio < 0) {
-                        $precio = 0.0;
-                    }
                     $importe = redondear($precio * $cant);
                     $subtotal = redondear($subtotal + $importe);
                     $lineas[] = [
@@ -210,13 +234,13 @@ case 'venta_crear': {
 
                 // 3. Cabecera
                 $st = $bd->prepare(
-                    'INSERT INTO ventas (folio,fecha,subtotal,descuento,total,envio,metodo,medio_pago_id,recibido,vuelto,referencia,nota,usuario,caja_id)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                    'INSERT INTO ventas (folio,fecha,subtotal,descuento,total,envio,metodo,medio_pago_id,recibido,vuelto,referencia,nota,usuario,cliente,caja_id)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                 );
                 $st->execute([
                     $folio, date('Y-m-d H:i:s'), $subtotal, $descuento, $total, $envio, $metodo, $metodoId,
                     $recibido >= 0 ? $recibido : null, $recibido >= 0 ? $vuelto : null,
-                    $ref ?: null, $nota ?: null, $usuario, (int) $caja['id'],
+                    $ref ?: null, $nota ?: null, $usuario, $cliente ?: null, (int) $caja['id'],
                 ]);
                 $ventaId = (int) $bd->lastInsertId();
 

@@ -27,7 +27,7 @@ function abrirCobro() {
 
   $("#cob-total").textContent = dinero(tot);
   $("#cob-ref").value = "";
-  $("#cob-retiro").value = "";
+  $("#cob-cliente").value = "";
   refrescarCobro();
 
   // Sugerencias de dinero: exacto y billetes redondo hacia arriba
@@ -45,13 +45,13 @@ function refrescarCobro() {
     const tot = totalCarrito();
     const metodo = estado.mediosPago.find(m => m.nombre === estado.metodoCobro);
     const efectivo = metodo ? !!metodo.efectivo : true;
-    $("#cob-efectivo").style.display = efectivo ? "" : "none";
-    $("#cob-otro").style.display = efectivo ? "none" : "";
+$("#cob-efectivo").style.display = efectivo ? "" : "none";
+  $("#cob-otro").style.display = efectivo ? "none" : "";
 
-    /* El nombre de quien retira solo se pregunta cuando hay lineas marcadas.
-       Si no hay ninguna marcada no se imprime ninguna comanda, asi que el
-       campo no tendria en que ir. */
-    $("#cob-comanda").hidden = lineasDeCocina().length === 0;
+    /* Con cocina el nombre escrito va a la comanda: es el que retira. Sin
+       cocina el campo sigue a la vista igual, porque la venta ahora guarda a
+       quien se le cobro y eso lo necesita aunque no haya nada para el bar. */
+    $("#cob-cliente-campo").querySelector("p").hidden = lineasDeCocina().length === 0;
 
     if (!efectivo) { $("#cob-confirmar").disabled = false; return; }
 
@@ -90,11 +90,10 @@ async function confirmarVenta() {
   const efectivo = metodo ? !!metodo.efectivo : true;
   const recibido = estado.recibido === "" ? 0 : Number(estado.recibido);
 
-  // Si hay algo para cocina, la comanda sale sola con el cobro: se arma en el
-  // servidor con las lineas marcadas y queda atada a este folio. El nombre de
-  // quien retira viaja en comanda_cliente; si no se escribe, el servidor le
-  // pone "Mostrador".
-  const hayCocina = lineasDeCocina().length > 0;
+  // Un solo campo de nombre para toda la venta. El servidor lo guarda en la
+  // venta y, si hay algo para cocina, lo copia a la comanda como el nombre de
+  // quien retira. Si esta vacio no se manda nada y queda como Mostrador.
+  const cliente = $("#cob-cliente").value.trim();
   try {
     const r = await api("venta_crear", {
       items: itemsParaVenta(),
@@ -104,7 +103,7 @@ async function confirmarVenta() {
       recibido: efectivo ? recibido : -1,
       vuelto: efectivo ? r2(recibido - totalCarrito()) : 0,
       referencia: $("#cob-ref").value.trim(),
-      comanda_cliente: hayCocina ? $("#cob-retiro").value.trim() : ""
+      cliente: cliente
     });
 
     cerrarModal("#m-cobro");
@@ -112,8 +111,12 @@ async function confirmarVenta() {
     renderBotonCobrar();
     estado.ultimaVenta = r.venta;
 
+    // Con las reglas del servidor (sin precio y sin stock no se venden) esto ya
+    // no deberia llegar nunca. Se deja el aviso por si un producto se queda sin
+    // existencias entre que se armo el carrito y se confirmo: en ese caso el
+    // servidor corta la venta y avisa con el nombre del producto.
     if (r.sin_stock && r.sin_stock.length) {
-      aviso("⚠️ Quedó en negativo: " + r.sin_stock.join(", "), "aviso-w");
+      aviso("⚠️ Sin stock al cobrar: " + r.sin_stock.join(", "), "mal");
     }
 
     mostrarVenta(r.venta, true);
@@ -269,7 +272,8 @@ function tarjetaComanda(c, historico) {
       pie = '<button class="btn ok" data-estado-com="entregado">🛵 Entregado</button>'
           + '<button class="btn" data-estado-com="preparando">↩ Volver</button>';
     }
-    pie += '<button class="btn sm" data-print-com="' + c.id + '" title="Imprimir la comanda">🖨</button>'
+    pie += '<button class="btn sm" data-print-com="' + c.id + '" title="Imprimir para la cocina">🖨 Cocina</button>'
+        + '<button class="btn sm" data-print-com-venta="' + c.id + '" title="Imprimir el pedido para el cliente">🧾 Venta</button>'
         + (esAdmin() ? '<button class="btn sm peligro" data-estado-com="cancelado" title="Cancelar">✕</button>' : "");
   }
 
@@ -339,7 +343,14 @@ function aplicarComanda(c) {
 
 /* ---------- Ticket de cocina ---------- */
 
-function imprimirComanda(id) {
+/**
+ * Imprime la comanda. El mismo papel sale para dos destinos distintos: el que
+ * va a la cocina, que necesita las lineas y el nombre de quien retira, y el
+ * que se lleva el cliente, que lleva el nombre y el total. Por eso el destino
+ * se elige en el boton y no se sacan dos plantillas distintas.
+ */
+function imprimirComanda(id, destino) {
+  const paraCocina = (destino || "cocina") === "cocina";
   const cont = $("#ticket-comanda");
   api("comanda", { id }).then(r => {
     const c = r.comanda;
@@ -355,14 +366,16 @@ function imprimirComanda(id) {
     if (c.lugar) datos.push("Mesa: " + esc(c.lugar));
     cont.innerHTML = `
       <div class="tc-cab">
-        <div class="tc-neg">COMANDA #${c.id}</div>
+        <div class="tc-neg">${paraCocina ? "COMANDA" : "PEDIDO"} #${c.id}</div>
         <div class="tc-sub">${ETIQUETA_TIPO[c.tipo] || c.tipo} · ${esc(ETIQUETA_ESTADO[c.estado] || c.estado)} · ${min} min</div>
       </div>
       <div class="tc-cliente">${esc(c.cliente)}</div>
-      ${datos.length ? '<div class="tc-datos">' + datos.join("<br>") + "</div>" : ""}
+      ${paraCocina && datos.length ? "<div class='tc-datos'>" + datos.join("<br>") + "</div>" : ""}
       ${c.notas ? '<div class="tc-obs">⚠ ' + esc(c.notas) + "</div>" : ""}
       <table class="tc-l">${filas}</table>
-      <div class="tc-pie">Pedido folio ${c.folio || "—"} · <b>YA COBRADO</b><br>Entregar sin volver a cobrar nada<br>${esc(estado.config.negocio || "")}</div>`;
+      ${paraCocina
+        ? `<div class="tc-pie">Pedido folio ${c.folio || "—"} · <b>YA COBRADO</b><br>Entregar sin volver a cobrar nada<br>${esc(estado.config.negocio || "")}</div>`
+        : `<div class="tc-pie">Pedido folio ${c.folio || "—"} · <b>TOTAL ${dinero(c.total)}</b><br>${esc(c.cliente)}<br>${esc(estado.config.negocio || "")}</div>`}`;
     imprimirTicketAhora("comanda");
   }).catch(e => aviso("No se pudo imprimir: " + e.message, "mal"));
 }

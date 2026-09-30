@@ -12,7 +12,7 @@ Estado del proyecto, decisiones tomadas y qué falta. Acá vive el detalle técn
 Punto de venta y control de existencias funcionando, con comandas de cocina, delivery,
 roles y caja. Corre en una sola PC, sin internet.
 
-- **Esquema de base:** versión 10 (constante `ESQUEMA_VERSION` en `inc/config.php`)
+- **Esquema de base:** versión 11 (constante `ESQUEMA_VERSION` en `inc/config.php`)
 - **Rama:** `main`. Para el estado exacto, `git log --oneline -1`; este documento envejece
   más rápido que el historial.
 - **Base de desarrollo:** la que hay que cargar para probar, está en
@@ -62,7 +62,7 @@ instalar.php     Instalador web
 respaldo.php     Respaldo y restauración de la base
 
 api/rutas/       11 archivos, uno por responsabilidad
-inc/             config.php (conexión, esquema ESQUEMA_VERSION = 7, helpers) y
+inc/             config.php (conexión, esquema ESQUEMA_VERSION = 11, helpers) y
                  sesion.php (sesión y control de permisos)
 js/              21 módulos del navegador, numerados en orden de carga
 css/estilos.css  Todo el CSS
@@ -124,8 +124,29 @@ Si se perdiera, ese botón quedaría sin categoría con la que trabajar.
 ### Un cobro, dos papeles
 
 En un kiosco con rotisería la venta es mezclada: el cliente lleva dos porciones de pizza, una
-hamburguesa, un pancho, una Coca de cola, una de limón y una cerveza, y paga **una sola vez**.
+hamburguesa, un pancho, una Coca de cola, una de limón y una cerveza, y paga **una sola vez.**
 Lo que va a la cocina y lo que se lleva el mostrador salen del mismo carrito.
+
+### El nombre de quien paga (esquema 11)
+
+Hay **un solo campo "Cliente"** en el cobro, siempre visible y opcional. Antes el nombre solo
+aparecía cuando la venta tenía algo para cocina, se llamaba "quien retira" y se guardaba
+solo en `comandas.cliente`: las ventas de góndola quedaban sin saber a quién se les había
+cobrado.
+
+Ahora:
+
+- `ventas.cliente` guarda a quién se le cobró, con o sin cocina, para que el corte de caja
+  pueda leerlo.
+- Si la venta tiene líneas de cocina, **el mismo nombre** es el que figura como
+  `comandas.cliente`. Vacío significa "Mostrador", que es lo más común.
+- El ticket de venta imprime el nombre; el de cocina, también.
+- En el detalle de la caja hay una columna "Cliente" con las ventas del turno.
+- Cada comanda del tablero imprime en dos destinos distintos: 🖨 Cocina (las líneas y la
+  instrucción de no volver a cobrar) y 🧾 Venta (las líneas, el nombre y el total).
+
+La migración a la 11 la hace sola `actualizarEsquema()`, con `agregarIndice()` al lado de
+`agregarColumna()` para que el índice también sea idempotente.
 
 Antes eran dos botones y dos cargas: el cajero armaba el ticket, cobraba, y después volvía a
 cargar todo en la comanda de cocina. El doble tipeo no es un problema de paciencia: si se
@@ -270,6 +291,23 @@ Distingue un producto de venta libre de uno normal:
 | Sale en faltantes y valuación | sí | **no** |
 | Admite movimientos de stock | sí | **no**, el backend los rechaza |
 
+Dos reglas valen para los dos casos, y las manda el servidor:
+
+- **Sin precio no se vende.** Un producto con `precio = 0` no entra al carrito ni llega a
+  guardarse la venta. Es lo que pasa con los productos que se importan del CSV y todavía no
+  tienen el precio cargado: existen, se ven en la rejilla marcados "sin stock"/"sin precio",
+  pero no se pueden cobrar hasta cargarle precio y stock.
+- **Sin stock no se vende, salvo en venta libre.** Un producto normal con `stock <= 0` no entra
+  al carrito y la venta se corta en el servidor. La venta libre no entra en esta regla porque no
+  lleva control de existencias: un trago o un sándwich se prepara, no se descuenta de un
+  estante.
+
+Antes estas dos reglas no existían y el servidor se lasava las manos: si el producto no tenía
+precio, TOMABA el que le mandaba el navegador (`api/rutas/ventas.php`), y si no había stock
+dejaba vender y avisaba "quedó en negativo" cuando ya estaba todo cobrado. Los dos caminos
+quedaron cerrados, pero conviene leer **`api/rutas/ventas.php` en el bucle de items** antes de
+tocar precios: ahí están las dos validaciones y el orden en que se aplican.
+
 El costo queda en 0 a propósito: los valores del proveedor cambian seguido y armar una
 receta por producto preparado no está a la altura del negocio todavía. Manda el precio que
 se cobra.
@@ -336,6 +374,10 @@ Estas son las cosas que costaron encontrar bugs. Si se tocan, hay que volver a p
 
 ## 4. Pendientes
 
+> Los puntos 1 a 3 son de una comanda que ya no existe como módulo aparte (se ató a la venta en
+> `d6275b9`). Quedan como registro histórico; si hay que tocar el tablero de cocina, conviene
+> revisarlos antes porque el contexto cambió.
+
 Los tres primeros son cambios chicos, ninguno rompe nada, y **no se empezaron a tocar a
 propósito** porque falta decidir con el usuario.
 
@@ -367,6 +409,16 @@ propósito** porque falta decidir con el usuario.
    garantía se diluye.
 6. **Sin límite de intentos en el login.** No hay bloqueo por intentos fallidos, o sea que la
    fuerza bruta es posible. Bajo en LAN, relevante si se expone a internet.
+7. **`generar-bkp.php` solo sanea la clave del admin.** El repo es público y el generador copia
+   costos, proveedores y ventas tal cual están en la base. Con la base de desarrollo no hay
+   problema, pero si alguien lo corre contra la base real sube datos privados al repo. Hay que
+   anonimizar también costos y proveedores, o separar el bkp de desarrollo del de producción.
+8. **Falta el usuario de cocina.** El rol `cocina` está implementado y probado (entra directo al
+   tablero, sin caja ni ventas ni stock), pero en la base de desarrollo no hay ningún usuario con
+   ese rol: solo está `admin`. Hay que crearlo para que el bar/comedor pueda entrar.
+9. **21 productos sin precio ni stock.** No es código: es el catálogo a medio cargar. Con las
+   reglas nuevas quedan bloqueados, que es lo correcto. Se resuelve cargando precio y stock a
+   mano (ver **4b.4**).
 
 Los primeros tres son cambios chicos y ninguno rompe nada. Nada de esto se empezó a tocar a
 propósito: falta decidir con el usuario, y el segundo es una decisión de cómo debería
@@ -375,6 +427,64 @@ resolverlo antes del despliegue multi-PC.**
 
 El segundo no es un bug con respuesta obvia: es una decisión de cómo debería comportarse la
 interfaz.
+
+---
+
+## 4b. Bugs encontrados en la revision de septiembre 2026
+
+Una sesion de diagnostico sobre la base de desarrollo encontro cuatro problemas reales. Tres
+estaban en el codigo y ya estan corregidos; el cuarto es de datos y lo carga el usuario.
+
+### 1. Los medios de pago no se podian elegir (corregido)
+
+**El sintoma:** en el cobro solo se podia cobrar "Exacto". Mercado Pago, Tarjeta y
+Transferencia no respondian al click.
+
+**La causa:** `js/19_eventos.js` enganchaba el click de cada medio de pago con un
+`forEach` **al cargar la pagina**, sobre los botones que estaban escritos a mano en
+`index.php`. Pero `abrirCobro()` (`js/06_cobro.js`) reemplaza ese bloque con
+`$("#cob-metodos").innerHTML = ...` generado desde la tabla `medios_pago`. Los botones
+nuevos **nacen sin listener**: los nodos viejos, y sus listeners, se destruyen con el
+`innerHTML`. La pantalla se quedaba clavada en Efectivo, que era el primer boton y el unico
+con el panel de efectivo dibujado.
+
+**El arreglo:** delegar sobre el contenedor, que es lo que ya se hacia bien con los billetes
+de efectivo unas lineas mas abajo (`#cob-billetes` + `e.target.closest("[data-billete]")`).
+
+**Para quien toque esto:** nunca enganchar listeners a elementos que otro codigo
+reconstruye con `innerHTML`. O se delega sobre el padre, o se reconstruye y se vuelve a
+enganchar. Este bug era invisible en el codigo y en el HTML: los botones se veian bien y
+habia cuatro, pero tres eran muertos.
+
+### 2. Se vendia a $0 y con precio inventado (corregido)
+
+En `venta_crear`, si el producto no tenia precio, el servidor **tomaba el que le mandaba el
+navegador** "para no dejar la linea en cero". Consecuencias: los productos importados del CSV
+sin precio se vendian a $0 sin ningun aviso, y un cliente malicioso podia poner el precio que
+quisiera. Ahora el servidor rechaza la venta y dice que producto falla.
+
+### 3. Se vendia en negativo sin impedirlo (corregido)
+
+Un producto de almacen con `stock <= 0` se podia vender: el backend lo anotaba en un arreglo
+`sin_stock`, restaba el stock dejandolo negativo, cobraba la venta y recien ahi avisaba
+"quedo en negativo". El aviso llegaba tarde y el stock ya estaba corrupto. Ahora el producto
+no entra al carrito y la venta se corta.
+
+### 4. Productos sin precio ni stock (datos, pendiente del usuario)
+
+21 productos del catalogo quedaron con `precio = 0` y `stock = 0`: existen, pero todavia no
+se les cargo precio y stock. Con las reglas nuevas quedan correctamente bloqueados hasta que
+se los cargue. **No es un bug: es el estado esperado de un catalogo a medio cargar.** El
+usuario los carga a mano.
+
+En la rejilla esos productos salen con la marca "sin stock" o "sin precio", en gris y con el
+precio en $0,00, para que se entienda de una que existen pero aun no se pueden cobrar.
+
+### Un detalle que se cruzo
+
+`contadores.folio` guarda el **ultimo folio usado**, no el proximo: el folio sale de
+`valor + 1`. Al limpiar ventas de prueba hay que dejar `valor = 0` para que la siguiente venta
+sea la numero 1. Dejarlo en 1 hace que la primera venta sea la 2.
 
 ### Un producto que hay que revisar
 
@@ -414,6 +524,31 @@ encendido, un pancho, tres destornilladores y un arroz sin tildar. Comprobado qu
 - el nombre de quien retira llega bien y no se cuela la referencia del pago.
 
 ### Corrientes al testear
+
+### Reglas de venta: los cinco casos que hay que probar
+
+Cambiados en septiembre 2026 (ver **4b**). Si se toca `api/rutas/ventas.php` o el carrito,
+estos cinco casos tienen que seguir dando lo mismo:
+
+| # | Caso | Resultado esperado |
+|---|---|---|
+| 1 | Producto de almacen con precio y stock | Se vende, descuenta stock |
+| 2 | Producto de venta libre (`sin_stock`) | Se vende, NO toca el stock |
+| 3 | Producto de almacen sin stock | **No** se vende, dice "esta agotado" |
+| 4 | Producto sin precio (`precio = 0`) | **No** se vende, dice "no tiene precio asignado" |
+| 5 | Caso 4 mandando el precio a mano en el JSON | **No** se vende: el precio sale siempre del servidor |
+
+El caso 5 es el importante: es el que hoy impide que un cliente se ponga el precio que quiera.
+Si alguna vez hay que tocar el precio en esa función, el 5 es el que avisa.
+
+Ademas, en el navegador:
+
+- En la rejilla, los productos del caso 3 y 4 salen con la marca "sin stock" o "sin precio" y
+  en gris.
+- Con la venta libre, los productos salen con la marca "a pedido".
+- En el cobro, el campo "Cliente" se ve siempre. Si la venta tiene algo de cocina, aparece abajo
+  el aviso de que ese nombre es el que retira; si no, el aviso no aparece.
+- En el detalle de la caja, la columna "Cliente" lista las ventas del turno.
 
 - **`api.php` toma la acción del query string, no del cuerpo.** El pedido va
   `api.php?accion=venta_crear` con el JSON en el body. Mandar la acción adentro del JSON
@@ -518,3 +653,63 @@ git log --oneline -5        # confirmar que el historial está como corresponde
 Y si el cambio tocó el armado (mover o partir archivos), cargar la app en el navegador y
 confirmar que no rompió nada: que abra, que la consola JavaScript esté limpia y que las
 vistas principales dibujen.
+
+---
+
+## 9. Reparto del trabajo entre varias personas
+
+Cuatro personas sobre el mismo repo. El riesgo real no es que dos toquen lo mismo: es que dos
+toquen lo mismo **sin saberlo**, y que el segundo empiece antes de traer lo del primero.
+
+Lo primero es regla de todos, sin excepcion: **`git fetch origin` y rebasear ANTES de
+empezar a editar, no al terminar.** Si alguien ya empezó, el conflicto es de los dos.
+
+Despues, para repartirse el trabajo sin pisarse, conviene tomar areas de archivos y no
+funciones sueltas. Estas areas están casi separadas por archivo:
+
+| Area | Archivos que tocan | Qué hay adentro |
+|---|---|---|
+| Cobro y caja | `api/rutas/ventas.php`, `js/06_cobro.js`, `js/15_cajas.js`, `api/rutas/cajas.php` | El modal de cobro, los medios de pago, el nombre del cliente, el corte y el cierre de caja |
+| Catálogo | `api/rutas/productos.php`, `js/07_productos.js`, `js/04_carrito.js`, `js/05_punto_de_venta.js` | Productos, categorías, producto rápido, la rejilla del kiosco y el carrito |
+| Comandas de cocina | `api/rutas/categorias.php` (hoja de códigos), `js/16_usuarios.js` (tablero) | La hoja imprimible, el tablero, los estados de la comanda, la impresión |
+| Esquema y base | `inc/config.php` | `ESQUEMA_VERSION`, `actualizarEsquema()`, `crearTablas()` |
+
+Los cruces que hay que saber de memoria, porque son los que rompen:
+
+- **`js/06_cobro.js` es el que más se toca.** Contiene el cobro, los medios de pago, el tablero
+  de cocina, el ticket de la comanda y `itemsParaVenta()`. Si dos personas lo abren a la vez,
+  el conflicto es seguro. Hay que coordinar quién lo toma.
+- **`js/19_eventos.js` es el pegamento de todas las vistas.** Escucha los clicks de todas las
+vistas. Cualquier cambio en el HTML de `index.php` o en los módulos de `js/` normalmente
+    necesita un listener nuevo acá.
+- **`api.php` es el enrutador y el que trae los helpers compartidos** (`venta()`, `itemsDe()`,
+  el mapeo de `medios_pago`). Cambiar la forma de la respuesta de una venta afecta a varias
+  vistas a la vez.
+- **`index.php` tiene el HTML de todas las vistas.** Agregar un campo al cobro, a un producto
+  o a un modal es un cambio acá, y el listener casi seguro va en `19_eventos.js`.
+- **`inc/config.php` tiene el HTML de todas las vistas del servidor.** Subir
+  `ESQUEMA_VERSION` sin el `agregarColumna` correspondiente deja la base vieja; y al revés,
+  agregar la columna sin subir la versión hace que la migración no corra nunca.
+
+Sobre `api/rutas/ventas.php`: es donde viven las reglas que no se pueden negociar (sin precio
+no se vende, sin stock no se vende). Si se toca, hay que probar a mano los cinco casos de la
+seccion 5, en especial que un producto sin precio no se pueda vender ni mandando el precio a
+mano.
+
+### Documentación siempre en git
+
+La documentación no es un afterthought: con cuatro personas, es el único lugar donde se
+escribe por qué algo está como está. Si un commit cambia el comportamiento de algo, el
+mensaje del commit tiene que explicar el porqué, y si el porqué no cabe en el mensaje, va en
+`datos/HOJA-DE-RUTA.md` en el mismo commit.
+
+Reglas para que sirva de algo:
+
+- **Este documento es la fuente de verdad del estado del proyecto**, más que el historial de
+  commits. Si el código y el documento se contradicen, el que se equivoca es el documento.
+- **Todo cambio de comportamiento se anota acá en el mismo commit**, no en uno aparte.
+- **Los bugs encontrados se dejan escritos, no solo arreglados.** El síntoma, la causa y el
+  arreglo. La sección 4b es el ejemplo: si alguien vuelve a enganchar un listener sobre un
+  elemento que otro código reconstruye, tiene que poder leer por qué no se hace así.
+- **No dejar pendientes solo en un chat ni en un commit message.** La sección 4 es la lista.
+- Cuando se resuelve un pendiente, se saca de la lista y se deja en 4b con lo que se encontró.

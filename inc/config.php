@@ -132,13 +132,15 @@ function crearTablas(): array
         `referencia` VARCHAR(60)  NULL,
         `nota`       VARCHAR(200) NULL,
         `usuario`    VARCHAR(50)  NULL,
+        `cliente`    VARCHAR(80)  NULL,
         `anulada`    TINYINT(1)   NOT NULL DEFAULT 0,
         `anulada_en` DATETIME     NULL,
         `motivo`     VARCHAR(200) NULL,
         PRIMARY KEY (`id`),
         UNIQUE KEY `uq_folio` (`folio`),
         KEY `ix_fecha`   (`fecha`),
-        KEY `ix_anulada` (`anulada`)
+        KEY `ix_anulada` (`anulada`),
+        KEY `ix_ventas_cliente` (`cliente`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
 
     $sentencias[] = 'CREATE TABLE IF NOT EXISTS `venta_items` (
@@ -547,6 +549,19 @@ function agregarColumna(string $tabla, string $definicion): void
     $col = trim(str_replace('`', '', preg_split('/\s+/', trim($definicion))[0]));
     if (!columnaExiste($tabla, $col)) {
         pdoBd()->exec("ALTER TABLE `$tabla` ADD COLUMN $definicion");
+    }
+}
+
+/** Idem para indices: sin esto, un CREATE INDEX repetido revienta la migracion. */
+function agregarIndice(string $tabla, string $indice, string $definicion): void
+{
+    $st = pdoBd()->prepare(
+        'SELECT COUNT(*) FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?'
+    );
+    $st->execute([DB_NOMBRE, $tabla, $indice]);
+    if ((int) $st->fetchColumn() === 0) {
+        pdoBd()->exec("CREATE INDEX `$indice` ON `$tabla` ($definicion)");
     }
 }
 
@@ -973,6 +988,16 @@ function actualizarEsquema(): array
         }
     }
 
+    // --- 10. Nombre de quien paga, en la propia venta ---
+    /* El nombre ya vivia solo en la comanda ("quien retira") y solo se
+       preguntaba cuando la venta tenia algo para cocina. Con esto la venta
+       guarda a quien se le cobro, asi que el corte de caja puede saber a quien
+       se le cobro cada venta. El campo es opcional: vacio significa Mostrador,
+       que es lo mas comun en un kiosco. */
+    agregarColumna('ventas', '`cliente` VARCHAR(80) NULL AFTER `usuario`');
+    agregarIndice('ventas', 'ix_ventas_cliente', '`cliente`');
+    $hechas[] = 'ventas: cliente';
+
     return $hechas;
 }
 
@@ -981,7 +1006,7 @@ function actualizarEsquema(): array
  * nuevo se aplica solo en el primer request. La marca en `config` evita
  * repetir el trabajo: solo corre de nuevo si el codigo pide una version mayor.
  */
-const ESQUEMA_VERSION = 10;
+const ESQUEMA_VERSION = 11;
 
 function migrarSiHaceFalta(): void
 {
