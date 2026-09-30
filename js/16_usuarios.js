@@ -102,28 +102,19 @@ async function cargarAjustesCocina() {
   if (!esAdmin()) return;
   /* Los atajos de comanda se fueron: lo que va a la cocina son productos del
      catalogo de la categoria "Comidas y Tragos", y se editan desde Productos.
-     Ya no hace falta traerlos ni tener una tabla propia en Ajustes. */
-  const z = await api("zonas").catch(() => ({ zonas: [] }));
-  estado.zonas = z.zonas || [];
-  renderAjustesZonas();
-  renderAjustesCategorias();
-}
+     Ya no hace falta traerlos ni tener una tabla propia en Ajustes.
 
-function renderAjustesZonas() {
-  const tb = $("#zonas-tb");
-  if (!tb) return;
-  if (!estado.zonas.length) {
-    tb.innerHTML = '<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--muted)">No hay zonas cargadas.</td></tr>';
-    return;
-  }
-  tb.innerHTML = estado.zonas.map(z => `<tr>
-    <td>${esc(z.nombre)}</td>
-    <td class="num">${dinero(z.costo)}</td>
-    <td class="acciones">
-      <button class="btn sm" data-edit-zona="${z.id}" title="Editar">✎</button>
-      <button class="btn sm peligro" data-borrar-zona="${z.id}" title="Borrar">🗑</button>
-    </td>
-  </tr>`).join("");
+     Las zonas tambien se fueron de Ajustes. El selector vivia en el modal de
+     comanda que ya no existe, asi que las zonas se cargaban pero ningun
+     pedido podia elegir una: el costo se configuraba y nunca se cobraba.
+     estado.zonas se sigue llenando en el arranque porque hay otros lugares
+     del sistema que la leen.
+
+     Ojo con el await: la tabla de categorias se dibuja recien cuando llegan
+     los datos. Antes este towardra esperaba el promise de api("zonas") y de
+     paso le daba tiempo al arranque; ahora que no espera nada, hay que pedir
+     las categorias explicitamente o la tabla sale vacia. */
+  await cargarCategorias();
 }
 
 // --- Categorias -------------------------------------------------------------
@@ -203,27 +194,9 @@ async function borrarCategoria(id) {
   } catch (e) { aviso(e.message, "mal"); }
 }
 
-let editZona = { id: 0, nombre: "", costo: 0 };
-
-function abrirZona(id) {
-  const z = id ? estado.zonas.find(x => x.id === id) : null;
-  editZona = z ? { id: z.id, nombre: z.nombre, costo: z.costo } : { id: 0, nombre: "", costo: 0 };
-  $("#zn-titulo").textContent = editZona.id ? "Editar zona" : "Nueva zona";
-  $("#zn-nombre").value = editZona.nombre;
-  $("#zn-costo").value = editZona.costo;
-  abrirModal("#m-zona");
-  setTimeout(() => $("#zn-nombre").focus(), 120);
-}
-
-async function guardarZona() {
-  const datos = { id: editZona.id, nombre: $("#zn-nombre").value.trim(), costo: Number($("#zn-costo").value) || 0 };
-  try {
-    await api("zona_guardar", datos);
-    cerrarModal("#m-zona");
-    await cargarAjustesCocina();
-    aviso("Zona guardada.", "ok");
-  } catch (e) { aviso(e.message, "mal"); }
-}
+/* El alta y el borrado de zonas se fueron de Ajustes (ver cargarAjustesCocina).
+   La API zona_guardar y zona_borrar siguen vivas por si el reparto se vuelve a
+   activar: alcanza con poner el <select> de zona en el modal de cobro. */
 
 async function pedirDatosClave() {
   const actual = await pedirClave("Cambiar mi clave", "Clave actual", "La que usás hoy", "");

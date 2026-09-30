@@ -503,27 +503,13 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
           </p>
         </div>
 
-        <div class="card">
-          <div class="card-cab">
-            <h2>Zonas de reparto</h2>
-            <button class="btn sm pri" id="btn-zona-nueva">+ Agregar zona</button>
-          </div>
-          <p class="parrafo" style="margin:12px 16px 0">
-            El costo se suma al total cuando el pedido es por reparto. Dejalo en 0 si no cobrás envío.
-          </p>
-          <div class="envoltura" style="box-shadow:none;border:0;border-radius:0">
-            <table class="tabla tabla-zonas">
-              <thead>
-                <tr>
-                  <th>Zona</th>
-                  <th class="num">Costo de envío</th>
-                  <th class="acciones"></th>
-                </tr>
-              </thead>
-              <tbody id="zonas-tb"></tbody>
-            </table>
-          </div>
-        </div>
+        <!-- El reparto por zonas queda deshabilitado a proposito. Antes el
+             selector de zona vivia en el modal de comanda que se borro, asi
+             que las zonas se podian cargar desde Ajes pero ningun pedido
+             podia elegir una: el costo se configuraba y nunca se cobraba.
+             La tabla zonas y el calculo del envio en el backend siguen
+             enteros, asi que revived este bloque y poné el <select> en el
+             modal de cobro para volver a activar el reparto. -->
 
       </div>
       </div>
@@ -650,22 +636,9 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
   </div>
 </div>
 
-<!-- ================= MODAL ATajo / ZONA ================= -->
-<div class="velo" id="m-zona">
-  <div class="modal" style="max-width:400px">
-    <div class="modal-cab"><h2 id="zn-titulo">Nueva zona</h2><button class="cerrar" data-cerrar>✕</button></div>
-    <div class="modal-cue">
-      <div class="campo"><label>Nombre de la zona</label>
-        <input id="zn-nombre" placeholder="Centro, Barrio Norte…" autocomplete="off"></div>
-      <div class="campo"><label>Costo de envío</label>
-        <input id="zn-costo" type="number" step="0.01" min="0" value="0"></div>
-    </div>
-    <div class="modal-pie">
-      <button class="btn" data-cerrar>Cancelar</button>
-      <button class="btn pri" id="zn-guardar">Guardar zona</button>
-    </div>
-  </div>
-</div>
+<!-- El modal de zona se fue con el alta de Ajustes: sin selector de zona en
+     el cobro no hay a que cargar costo, y un formulario que guarda algo que
+     no se usa es peor que no tenerlo. La API de zonas sigue viva. -->
 
 <div class="velo" id="m-categoria">
   <div class="modal" style="max-width:400px">

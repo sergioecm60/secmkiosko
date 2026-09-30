@@ -128,22 +128,8 @@ function conectar() {
     }
   });
 
-  /* --- ajustes de zonas --- */
-  escuchar("#btn-zona-nueva", "click", () => abrirZona(0));
-  escuchar("#zonas-tb", "click", async e => {
-    const ed = e.target.closest("[data-edit-zona]");
-    const bo = e.target.closest("[data-borrar-zona]");
-    if (ed) abrirZona(Number(ed.dataset.editZona));
-    if (bo) {
-      if (await confirmar("Borrar la zona", "Las comandas viejas guardan el nombre.")) {
-        try {
-          await api("zona_borrar", { id: Number(bo.dataset.borrarZona) });
-          await cargarAjustesCocina();
-        } catch (ex) { aviso(ex.message, "mal"); }
-      }
-    }
-  });
-  escuchar("#zn-guardar", "click", guardarZona);
+  /* Los eventos de zonas se fueron con el alta de Ajustes. El reparto esta
+     deshabilitado; ver la nota en cargarAjustesCocina (js/16_usuarios.js). */
 
   /* --- categorias --- */
   escuchar("#btn-cat-nuevo", "click", () => abrirCategoria(0));
