@@ -348,8 +348,27 @@ en temporales, no versionados a propósito.
 Última corrida: **41/41** API, **35/35** navegador (producto rápido), **33/33** comanda,
 **15/15** atajos y permisos. Total **48/48**.
 
+### La comanda y los dos stocks
+
+Probado de punta a punta con una venta mezclando los dos mundos: dos Coca con el tilde
+encendido, un pancho, tres destornilladores y un arroz sin tildar. Comprobado que
+
+- la Coca y el arroz (nuestros, con stock) descuentan igual tildados o no;
+- el pancho y el destornillador (del bar, `sin_stock`) no tocan nuestro stock;
+- la comanda lleva la Coca porque la tildaron, y el arroz no porque no;
+- el nombre de quien retira llega bien y no se cuela la referencia del pago.
+
 ### Corrientes al testear
 
+- **`api.php` toma la acción del query string, no del cuerpo.** El pedido va
+  `api.php?accion=venta_crear` con el JSON en el body. Mandar la acción adentro del JSON
+  contesta `Acción no reconocida: ` y parece un problema de sesión.
+- **`login.php` toma la acción del POST.** Va `accion=entrar` en el cuerpo del formulario;
+  pasarlo como `?accion=entrar` deja la pantalla de login sin ningún error visible, porque
+  nunca entra al caso que la procesa.
+- PowerShell `WebSession` **tira el cookie cuando la respuesta es un 302**, así que la
+  sesión parece perdida cuando en realidad está bien. `curl` con `-c`/`-b` o Node con
+  `fetch` andan bien.
 - Un usuario recién creado queda con `debe_cambiar_clave = 1` y `login.php` lo devuelve a
   cambiar la clave sin dejarlo entrar. Hay que limpiarlo por SQL antes de probar el rol.
 - `confirmar()` re-renderiza la tabla, así que un nodo inyectado a mano ya no existe para

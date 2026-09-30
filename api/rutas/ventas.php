@@ -12,6 +12,23 @@ function categoriaEsCocina(PDO $bd, string $nombre): bool
     return (int) $st->fetchColumn() === 1;
 }
 
+/** Lee el tilde de cocina de una linea del carrito.
+ *  El navegador manda 1 o 0, pero JSON admite tambien true/false, y un
+ *  cliente que mande un booleano de verdad se quedaria sin comanda sin que
+ *  nadie se entere: el producto se cobra y nunca llega al papel. Por eso
+ *  aqui se aceptan las dos formas. Ojo con (bool)"0", que en PHP es true:
+ *  por eso el caso "0" se apaga a mano y no con un cast. */
+function lineaPideCocina($v): bool
+{
+    if (is_bool($v)) {
+        return $v;
+    }
+    if (is_string($v)) {
+        return !in_array(strtolower(trim($v)), ['0', 'false', 'no', ''], true);
+    }
+    return is_numeric($v) && (float) $v !== 0.0;
+}
+
 switch ($accion) {
 case 'venta_crear': {
             // Sin caja abierta no se cobra: así cada venta pertenece a un
@@ -148,7 +165,7 @@ case 'venta_crear': {
                         // Lo decide el cajero en la linea del carrito. El texto
                         // de la comanda se arma con el nombre real del producto,
                         // asi que sale del servidor y no del navegador.
-                        'cocina' => (bool) (entero($it['cocina'] ?? 0)),
+                        'cocina' => lineaPideCocina($it['cocina'] ?? false),
                     ];
                 }
                 if (!$lineas) {
@@ -378,9 +395,20 @@ case 'venta_crear': {
                         'referencia' => 'Anulación venta folio ' . (int) $v['folio'], 'usuario' => nombreUsuario(),
                     ]);
                 }
-                $bd->prepare('UPDATE ventas SET anulada=1, anulada_en=NOW(), motivo=?, anulada_por=? WHERE id=?')
-                   ->execute([$motivo, nombreUsuario(), $id]);
-                $bd->commit();
+            $bd->prepare('UPDATE ventas SET anulada=1, anulada_en=NOW(), motivo=?, anulada_por=? WHERE id=?')
+               ->execute([$motivo, nombreUsuario(), $id]);
+
+            // La comanda va atada a la venta por venta_id. Si la venta se
+            // anula y el papel queda "pendiente", la cocina sigue al tablero
+            // y prepara un pedido que nadie va a retirar: se cobra en el
+            // mostrador lo que no se entrega. Se cancela junto con la venta.
+            $st = $bd->prepare(
+                "UPDATE comandas SET estado = 'cancelado', actualizado = ?, cerrado_en = ?
+                 WHERE venta_id = ? AND estado NOT IN ('entregado','cancelado')"
+            );
+            $st->execute([date('Y-m-d H:i:s'), date('Y-m-d H:i:s'), $id]);
+
+            $bd->commit();
             } catch (Throwable $e) {
                 $bd->rollBack();
                 throw $e;
