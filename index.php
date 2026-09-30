@@ -505,7 +505,7 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
 
         <!-- El reparto por zonas queda deshabilitado a proposito. Antes el
              selector de zona vivia en el modal de comanda que se borro, asi
-             que las zonas se podian cargar desde Ajes pero ningun pedido
+             que las zonas se podian cargar desde Ajustes pero ningun pedido
              podia elegir una: el costo se configuraba y nunca se cobraba.
              La tabla zonas y el calculo del envio en el backend siguen
              enteros, asi que revived este bloque y poné el <select> en el

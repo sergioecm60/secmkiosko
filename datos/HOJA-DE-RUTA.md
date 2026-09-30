@@ -12,10 +12,32 @@ Estado del proyecto, decisiones tomadas y qué falta. Acá vive el detalle técn
 Punto de venta y control de existencias funcionando, con comandas de cocina, delivery,
 roles y caja. Corre en una sola PC, sin internet.
 
-- **Esquema de base:** versión 7, 15 tablas
-- **Rama:** `main`, con el código en `86b6a19` y commits de documentación encima
-- **Estado de la base al cierre:** 49 productos, 242 formatos, 3 zonas, 14 atajos de comanda,
-  4 medios de pago, 1 proveedor, 1 usuario, 1 caja, 0 ventas, 0 comandas
+- **Esquema de base:** versión 10 (constante `ESQUEMA_VERSION` en `inc/config.php`)
+- **Rama:** `main`. Para el estado exacto, `git log --oneline -1`; este documento envejece
+  más rápido que el historial.
+- **Base de desarrollo:** la que hay que cargar para probar, está en
+  [`bkp/base-de-desarrollo.sql`](../bkp/base-de-desarrollo.sql) — 132 registros, usuario
+  `admin` con clave `kiosco-dev-2026`. Ver **La base se migra sola, los datos no**.
+
+### La base se migra sola, los datos no
+
+`actualizarEsquema()` corre en cada conexión y lleva el **esquema** a la versión del código
+sin que nadie haga nada. Eso lleva a una trampa: **el esquema al día no significa la base al
+día.** El catálogo —productos, categorías, precios, zonas— hay que importarlo a mano.
+
+Pasó de verdad: con el esquema ya en 10, la base seguía con 2 categorías de demo y ninguna
+marcada como cocina. Una revisión del código concluded que faltaba la categoría
+"Comidas y Tragos", y era mentira: la base estaba vieja, no el código.
+
+Antes de culpar al código de algo raro en los datos, comparar contra el volcado:
+
+```bash
+mysql -u root kiosco -e "SELECT id,nombre,cocina FROM categorias ORDER BY id"
+```
+
+Y para dejar la base como corresponde: el `mysql -u root kiosco < bkp/base-de-desarrollo.sql`
+del LEEME, sobre una base recién creada. Ojo que eso **pisa el catálogo** y cambia la clave
+del admin local.
 
 El detalle día por día está en
 [`datos/ejemplo/RESUMEN-TRABAJO.md`](ejemplo/RESUMEN-TRABAJO.md). Este documento es el
@@ -271,7 +293,10 @@ Estas son las cosas que costaron encontrar bugs. Si se tocan, hay que volver a p
 4. **`norm()` antes de comparar claves de línea**, para que "Pan", " pan" y "PAN" sean la
    misma línea de comanda. Acota los bordes y compara en minúsculas.
 5. **Una comanda sin items no se inserta.** Validar antes de insertar o queda huérfana.
-6. **La comanda no fuerza cobro.** `venta_id` y `folio` van nulos.
+6. **La comanda va atada a una venta cobrada.** `venta_id` y `folio` se rellenan siempre, y
+   `guardarComanda()` se llama **dentro** de la transacción de `venta_crear`. Si algo falla
+   después, se cae la venta entera: no queda comanda de un pedido que no se cobró. Por eso
+   `comanda_crear` ya no existe como ruta aparte.
 7. **La clave de fábrica no opera:** `debe_cambiar_clave = 1` bloquea todo.
 8. **Cocina no cobra**, aunque tenga la sesión abierta.
 9. **Probar siempre contra el mismo host** que el de la sesión.

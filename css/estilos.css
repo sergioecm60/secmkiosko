@@ -552,13 +552,9 @@ body[data-rol="vendedor"] .solo-admin{display:none !important}
 .tabla-ajustes th{white-space:normal}
 .tabla-ajustes td{white-space:normal; overflow-wrap:anywhere; line-height:1.4}
 .tabla-ajustes .acciones{white-space:nowrap; overflow:visible; padding-left:6px; padding-right:6px}
-/* Zonas de reparto: 3 columnas, la de nombre con texto libre. */
-.tabla-zonas{table-layout:fixed; width:100%}
-.tabla-zonas th:nth-child(2){width:30%}
-.tabla-zonas th:nth-child(3){width:100px; padding-left:6px; padding-right:6px}
-.tabla-zonas th{white-space:normal}
-.tabla-zonas td{white-space:normal; overflow-wrap:anywhere; line-height:1.4}
-.tabla-zonas .acciones{padding-left:6px; padding-right:6px}
+/* Las zonas de reparto no tienen tabla: el selector vivia en el modal de
+   comanda que ya no existe (ver index.php). Si vuelve el reparto, hay que
+   sacar estas reglas de nuevo y agregar las suyas. */
 
 /* Usuarios del sistema: 8 columnas. Con anchos fijos sumaba mas de 700px y
    empujaba la vista de Ajustes entera. Se deja que el navegador reparta. */
