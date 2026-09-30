@@ -782,6 +782,18 @@ function actualizarEsquema(): array
     // aunque ningun producto la este usando todavia.
     $pdo->prepare('INSERT IGNORE INTO categorias (nombre, orden) VALUES (?, 999)')->execute(['Venta libre']);
 
+    // Y una de cocina, vacia y ya marcada. El cobro manda a la comanda lo que
+    // sea de una categoria con cocina=1, asi que sin al menos una el sistema
+    // queda entero pero sin comanda: se vende de mostrador y no se puede
+    // probar el flujo mixto. Antes esta categoria solo existia si alguien la
+    //aba a marcar a mano, y en una instalacion nueva nadie tiene motivo de
+    // saber que tiene que hacerlo. Viene vacia a proposito: los productos los
+    // carga el que abre el kiosco, y se renombra desde Ajustes al gusto.
+    $st = $pdo->prepare('INSERT IGNORE INTO categorias (nombre, orden, cocina)
+                         VALUES (?, 998, 1)');
+    $st->execute(['Comidas y Tragos']);
+    $hechas[] = 'categoria de cocina para la comanda';
+
     // Y ahora al reves: los productos toman la forma canonica de su fila.
     // Si alguien escribio "bebidas" a mano queda "Bebidas" y las fichas de
     // Vender no se parten en dos.

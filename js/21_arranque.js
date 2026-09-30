@@ -72,12 +72,19 @@ async function iniciar() {
     aplicarMarca();
     renderPOS();
     $("#txt-buscar").focus();
-        // Zonas: hoy no se usan para delivery, pero se dejan cargadas para que
-        // volver a activarlo sea solo cambiar el flujo de la comanda.
-        api("zonas").then(r => { estado.zonas = r.zonas || []; }).catch(() => {});
-
-    api("categorias").then(r => { estado.categorias = r.categorias || []; }).catch(() => {});
-    if (esAdmin()) cargarAjustesCocina().catch(() => {});
+    /* Zonas y categorias se resuelven antes de seguir, y no por convenience:
+       Ajustes dibuja la tabla de categorias apenas las recibe, asi que si
+       estas dos promesas quedan flotando, renderAjustesCategorias() corre
+       contra un estado vacio y la tabla sale en blanco sin que nada falle.
+       El orden de respuesta de dos peticiones no esta garantizado, y antes
+       esto funcionaba solo porque el await de zonas.delayaba lo suficiente.
+       Si alguna vez hay que volver a soltar una de estas, que sea porque ya
+       no la necesita nadie al pintar, no por forgetting el await. */
+    await Promise.all([
+        api("zonas").then(r => { estado.zonas = r.zonas || []; }).catch(() => {}),
+        api("categorias").then(r => { estado.categorias = r.categorias || []; }).catch(() => {}),
+    ]);
+    if (esAdmin()) await cargarAjustesCocina();
   } catch (e) {
     document.body.innerHTML = '<div class="vacio" style="height:100vh">'
       + '<div class="ico">⚠️</div><h3>No se pudo conectar con el sistema</h3>'

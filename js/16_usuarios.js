@@ -110,11 +110,14 @@ async function cargarAjustesCocina() {
      estado.zonas se sigue llenando en el arranque porque hay otros lugares
      del sistema que la leen.
 
-     Ojo con el await: la tabla de categorias se dibuja recien cuando llegan
-     los datos. Antes este towardra esperaba el promise de api("zonas") y de
-     paso le daba tiempo al arranque; ahora que no espera nada, hay que pedir
-     las categorias explicitamente o la tabla sale vacia. */
-  await cargarCategorias();
+     Por que pide las categorias otra vez si el arranque ya las trajo: esta
+     funcion se llama sola desde ahi, y hasta hace poco la tabla salia
+     vacia. La causa era el orden, no los datos: en 21_arranque.js las dos
+     peticiones iban flotando sin await y esta arrancaba en paralelo, así
+     que corria contra un estado todavia vacio. El arranque ahora espera
+     las dos antes de seguir y esta funcion ya no depende de ahi, pero
+     igual pide lo que necesita: una funcion que dibuja una tabla tiene
+     que traer sus propios datos, no confiar en que otro los dejo listos. */
 }
 
 // --- Categorias -------------------------------------------------------------

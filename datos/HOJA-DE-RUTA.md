@@ -301,6 +301,23 @@ Estas son las cosas que costaron encontrar bugs. Si se tocan, hay que volver a p
 8. **Cocina no cobra**, aunque tenga la sesión abierta.
 9. **Probar siempre contra el mismo host** que el de la sesión.
 10. **El modal abierto se marca con la clase `on`**, nunca con `abierto`.
+11. **El arranque espera los datos antes de pintar.** Dos peticiones sin `await` se
+    resuelven en orden de red, y ese orden no está garantizado: el que sepaina primero
+    compila contra un estado todavía vacío y la tabla sale en blanco **sin que nada
+    falle visiblemente**. Por eso `21_arranque.js` espera zonas y categorías antes de
+    llamar a `cargarAjustesCocina()`. Ya pasó una vez: la tabla de categorías de Ajustes
+    salía vacía porque un `await api("zonas")` sin relación estaba sosteniendo el arranque
+    por casualidad. Si alguna vez hay que soltar una de esas dos, tiene que ser porque
+    ya no la necesita nadie al pintar, no por forgotten el `await`.
+12. **Una función que dibuja una tabla trae sus propios datos.** No confiar en que otro
+    los dejó listos. Por eso `cargarAjustesCocina()` pide las categorías aunque el arranque
+    ya las haya cargado: así depende de sus datos y no del orden de arranque.
+13. **Toda instalación tiene al menos una categoría con `cocina = 1`.** El cobro manda a
+    la comanda lo que sea de una categoría marcada, así que sin ninguna el sistema queda
+    entero pero se vende de mostrador y el flujo mixto no se puede ni probar. La migración
+    siembra una vacía y marcada, como hace con `Venta libre`. Esto se rompió porque el
+    catálogo se había cargado a mano en una base y no en la instalación: el código andaba
+    en una máquina y no en la otra, y el síntoma no señalaba al dato.
 
 ---
 
