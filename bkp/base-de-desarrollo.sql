@@ -1,6 +1,6 @@
 -- ==================================================
 -- Kiosco â€” respaldo de la base de datos
--- Generado: 30/09/2026 14:41:08
+-- Generado: 30/09/2026 16:14:56
 -- Base: kiosco (8.3.33 / MySQL 8.4.3)
 -- Para restaurar: mysql -u root kiosco < este_archivo.sql
 -- ==================================================
@@ -63,14 +63,11 @@ CREATE TABLE `categorias` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_nombre` (`nombre`),
   KEY `ix_activo` (`activo`)
-) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `categorias` VALUES
 ('1','Almacen','1','0','0'),
-('3','Botanas','1','0','0'),
-('4','Despensa','1','0','0'),
 ('5','Venta libre','1','0','0'),
-('24','Bebidas','1','30','0'),
 ('25','Comidas y Tragos','1','0','1');
 
 -- ---------------------------------------------------------
@@ -241,7 +238,7 @@ CREATE TABLE `movimientos` (
   KEY `ix_fecha` (`fecha`),
   KEY `ix_producto` (`producto_id`),
   KEY `ix_tipo` (`tipo`)
-) ENGINE=InnoDB AUTO_INCREMENT=55 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=76 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `movimientos` VALUES
 ('47','2026-09-30 11:57:28','venta','52','Gaseosa Coca Cola 1.5L','-2.00','36.00','34.00','Venta folio 1','Prueba API (prueba_api)',NULL,NULL,NULL),
@@ -251,7 +248,28 @@ INSERT INTO `movimientos` VALUES
 ('51','2026-09-30 11:59:42','venta','52','Gaseosa Coca Cola 1.5L','-2.00','36.00','34.00','Venta folio 2','Prueba API (prueba_api)',NULL,NULL,NULL),
 ('52','2026-09-30 11:59:42','venta','51','Arroz Gallo Oro Parboil 1kg','-1.00','12.00','11.00','Venta folio 2','Prueba API (prueba_api)',NULL,NULL,NULL),
 ('53','2026-09-30 11:59:42','anulacion','52','Gaseosa Coca Cola 1.5L','2.00','34.00','36.00','Anulación venta folio 2','Prueba API (prueba_api)',NULL,NULL,NULL),
-('54','2026-09-30 11:59:42','anulacion','51','Arroz Gallo Oro Parboil 1kg','1.00','11.00','12.00','Anulación venta folio 2','Prueba API (prueba_api)',NULL,NULL,NULL);
+('54','2026-09-30 11:59:42','anulacion','51','Arroz Gallo Oro Parboil 1kg','1.00','11.00','12.00','Anulación venta folio 2','Prueba API (prueba_api)',NULL,NULL,NULL),
+('55','2026-09-30 16:08:52','alta','97','Bizcocho Salado Don Satur 200 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('56','2026-09-30 16:08:52','alta','98','Pasta de Maní Natural Maní King 485 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('57','2026-09-30 16:08:52','alta','99','Yogur natural sin azúcar agregada Tregar 280 gramos','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('58','2026-09-30 16:08:52','alta','100','Pan Blanco LACTAL Lactal 315','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('59','2026-09-30 16:08:52','alta','101','Yogurisimo sabor Natural La Serenísima 300 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('60','2026-09-30 16:08:52','alta','102','9 de Oro clásicos Molino Cañuelas 200 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('61','2026-09-30 16:08:52','alta','103','Leche Protein La Serenísima 1 l','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('62','2026-09-30 16:08:52','alta','104','Polenta instantánea Arcor 490 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('63','2026-09-30 16:08:52','alta','105','Finlandia light La Serenísima 290 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('64','2026-09-30 16:08:52','alta','106','Mayonesa Clásica Rica y Cremosa Hellmann\'s 475 gr','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('65','2026-09-30 16:08:52','alta','107','Dulce de leche estilo colonial La Serenísima 400 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('66','2026-09-30 16:08:52','alta','108','Leche Zero Lactosa La Serenísima 1 l','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('67','2026-09-30 16:08:52','alta','109','Criollitas x3 Bagley 300 gr','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('68','2026-09-30 16:08:52','alta','110','Agua eco de los andes 500 ml','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('69','2026-09-30 16:08:52','alta','111','Yerba Unión 500 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('70','2026-09-30 16:08:53','alta','112','Azúcar Clásica Ledesma 1 kg','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('71','2026-09-30 16:08:53','alta','113','Finlandia + Liv La Serenísima 290 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('72','2026-09-30 16:08:53','alta','114','Chocolinas Original Bagley 250 gr','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('73','2026-09-30 16:08:53','alta','115','Pan Blanco LACTAL familiar 460','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('74','2026-09-30 16:08:53','alta','116','Yogurisimo Griego Natural La Serenísima 300 g','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL),
+('75','2026-09-30 16:08:53','alta','117','Coca Cola Original 2,25 L','0.00','0.00','0.00','Alta de producto','Administrador (admin)',NULL,NULL,NULL);
 
 -- ---------------------------------------------------------
 -- Tabla: productos
@@ -282,41 +300,62 @@ CREATE TABLE `productos` (
   KEY `ix_categoria` (`categoria`),
   KEY `ix_nombre` (`nombre`),
   KEY `ix_activo` (`activo`)
-) ENGINE=InnoDB AUTO_INCREMENT=97 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=119 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `productos` VALUES
-('49','Galletitas Traviata Kesitas 96g','7790040143944','Botanas','850.00','24.00','8.00','paquete',NULL,'1','2026-09-29 15:34:39','550.00','Codigo confirmado en el Maestro SEPA','1',NULL,'1.000',NULL,NULL,'0'),
-('50','Galletitas Traviata Crackers Rex 96g','7790040143937','Botanas','800.00','18.00','6.00','paquete',NULL,'1','2026-09-29 15:34:39','520.00','Codigo con digito verificador correcto; el maestro no tiene esta variante Rex','1',NULL,'1.000',NULL,NULL,'0'),
+('49','Galletitas Traviata Kesitas 96g','7790040143944','Almacen','850.00','24.00','8.00','paquete',NULL,'1','2026-09-29 15:34:39','550.00','Codigo confirmado en el Maestro SEPA','1',NULL,'1.000',NULL,NULL,'0'),
+('50','Galletitas Traviata Crackers Rex 96g','7790040143937','Almacen','800.00','18.00','6.00','paquete',NULL,'1','2026-09-29 15:34:39','520.00','Codigo con digito verificador correcto; el maestro no tiene esta variante Rex','1',NULL,'1.000',NULL,NULL,'0'),
 ('51','Arroz Gallo Oro Parboil 1kg','7790070411716','Almacen','2400.00','12.00','4.00','paquete',NULL,'1','2026-09-29 15:34:39','1650.00','Codigo corregido: el del usuario (7790070410120) tenia mal el digito verificador','1',NULL,'1.000',NULL,NULL,'0'),
-('52','Gaseosa Coca Cola 1.5L','7790895000430','Bebidas','3500.00','36.00','12.00','botella',NULL,'1','2026-09-29 15:34:39','2300.00','Codigo corregido: el del usuario (7790895000860) tenia mal el digito verificador','1',NULL,'1.000',NULL,NULL,'0'),
-('53','Fernet Branca 750ml','7790290001193','Bebidas','9500.00','6.00','2.00','botella',NULL,'1','2026-09-29 15:34:39','6300.00','Codigo corregido y de prefijo: el del usuario (7791293000018) no era de Branca','1',NULL,'1.000',NULL,NULL,'0'),
-('54','Galletitas Chocolinas 170g','7790040929906','Botanas','1100.00','30.00','10.00','paquete',NULL,'1','2026-09-29 15:34:39','720.00','Codigo del maestro para la presentacion de 170g','1',NULL,'1.000',NULL,NULL,'0'),
+('52','Gaseosa Coca Cola 1.5L','7790895000430','Almacen','3500.00','36.00','12.00','botella',NULL,'1','2026-09-29 15:34:39','2300.00','Codigo corregido: el del usuario (7790895000860) tenia mal el digito verificador','1',NULL,'1.000',NULL,NULL,'0'),
+('53','Fernet Branca 750ml','7790290001193','Almacen','9500.00','6.00','2.00','botella',NULL,'1','2026-09-29 15:34:39','6300.00','Codigo corregido y de prefijo: el del usuario (7791293000018) no era de Branca','1',NULL,'1.000',NULL,NULL,'0'),
+('54','Galletitas Chocolinas 170g','7790040929906','Almacen','1100.00','30.00','10.00','paquete',NULL,'1','2026-09-29 15:34:39','720.00','Codigo del maestro para la presentacion de 170g','1',NULL,'1.000',NULL,NULL,'0'),
 ('55','Aceite Girasol y Oliva Natura 900ml',NULL,'Almacen','3200.00','9.00','3.00','botella',NULL,'1','2026-09-29 15:34:39','0.00','Codigo EAN-13 verificado. Precio y stock de referencia: cargar los reales del local.','1',NULL,'1.000',NULL,NULL,'0'),
-('56','Caramelos Butter Toffees Dulce de Leche','7790040010604','Despensa','2900.00','15.00','5.00','paquete',NULL,'1','2026-09-29 15:34:39','1900.00','Codigo con digito verificador correcto','1',NULL,'1.000',NULL,NULL,'0'),
-('57','Alfajor Guolis Dulce de Leche','7790189000108','Despensa','1500.00','40.00','12.00','pieza',NULL,'1','2026-09-29 15:34:39','980.00','Codigo con digito verificador correcto; no figura en el Maestro SEPA','1',NULL,'1.000',NULL,NULL,'0'),
-('58','Agua Mineral Villavicencio Sin Gas 1.5L','7790315000439','Bebidas','2200.00','48.00','16.00','botella',NULL,'1','2026-09-29 15:34:39','1450.00','Codigo corregido: el del usuario (7791230000010) tenia mal el digito verificador','1',NULL,'1.000',NULL,NULL,'0'),
-('73','Hamburguesa completa',NULL,'Comidas y Tragos','4500.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('74','Pancho',NULL,'Comidas y Tragos','4200.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('75','Sándwich de miga',NULL,'Comidas y Tragos','3800.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('76','Sándwich de milanesa',NULL,'Comidas y Tragos','5200.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('77','Pollo con papas',NULL,'Comidas y Tragos','6000.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('56','Caramelos Butter Toffees Dulce de Leche','7790040010604','Almacen','2900.00','15.00','5.00','paquete',NULL,'1','2026-09-29 15:34:39','1900.00','Codigo con digito verificador correcto','1',NULL,'1.000',NULL,NULL,'0'),
+('57','Alfajor Guolis Dulce de Leche','7790189000108','Almacen','1500.00','40.00','12.00','pieza',NULL,'1','2026-09-29 15:34:39','980.00','Codigo con digito verificador correcto; no figura en el Maestro SEPA','1',NULL,'1.000',NULL,NULL,'0'),
+('58','Agua Mineral Villavicencio Sin Gas 1.5L','7790315000439','Almacen','2200.00','48.00','16.00','botella',NULL,'1','2026-09-29 15:34:39','1450.00','Codigo corregido: el del usuario (7791230000010) tenia mal el digito verificador','1',NULL,'1.000',NULL,NULL,'0'),
+('73','Hamburguesa completa','2000000000732','Comidas y Tragos','4500.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('74','Pancho','2000000000749','Comidas y Tragos','4200.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('75','Sándwich de miga','2000000000756','Comidas y Tragos','3800.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('76','Sándwich de milanesa','2000000000763','Comidas y Tragos','5200.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('77','Pollo con papas','2000000000770','Comidas y Tragos','6000.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
 ('78','Gaseosa Coca Cola 1 L',NULL,'Almacen','3200.00','12.00','4.00','botella',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender. Si la mandás a la comanda, igual descuenta: el tilde solo decide si va al papel de la cocina.',NULL,NULL,'1.000',NULL,NULL,'0'),
 ('80','Gaseosa Coca Cola 2.25 L',NULL,'Almacen','5800.00','12.00','4.00','botella',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender. Si la mandás a la comanda, igual descuenta: el tilde solo decide si va al papel de la cocina.',NULL,NULL,'1.000',NULL,NULL,'0'),
 ('81','Cerveza en botella',NULL,'Almacen','2800.00','24.00','6.00','botella',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender.',NULL,NULL,'1.000',NULL,NULL,'0'),
-('82','Vaso de vino',NULL,'Comidas y Tragos','3500.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('83','Trago de gin',NULL,'Comidas y Tragos','4800.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('84','Piña colada',NULL,'Comidas y Tragos','5200.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('85','Trago de Gancia con Fernet',NULL,'Comidas y Tragos','4500.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('86','Trago mesclado',NULL,'Comidas y Tragos','4000.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','PRECIO DE REFERENCIA. Lo prepara el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('82','Vaso de vino','2000000000824','Comidas y Tragos','3500.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('83','Trago de gin','2000000000831','Comidas y Tragos','4800.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('84','Piña colada','2000000000848','Comidas y Tragos','5200.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('85','Trago de Gancia con Fernet','2000000000855','Comidas y Tragos','4500.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('86','Trago mesclado','2000000000862','Comidas y Tragos','4000.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:07:34','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
 ('87','Fernet 1/2 litro',NULL,'Almacen','3500.00','6.00','2.00','botella',NULL,'1','2026-09-30 11:17:21','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender.',NULL,NULL,'1.000',NULL,NULL,'0'),
 ('89','Fernet 1 litro',NULL,'Almacen','6200.00','4.00','2.00','botella',NULL,'1','2026-09-30 11:17:21','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender.',NULL,NULL,'1.000',NULL,NULL,'0'),
 ('90','Cerveza en lata',NULL,'Almacen','2600.00','36.00','12.00','lata',NULL,'1','2026-09-30 11:26:10','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender.',NULL,NULL,'1.000',NULL,NULL,'0'),
 ('91','Vino en botella',NULL,'Almacen','4500.00','12.00','4.00','botella',NULL,'1','2026-09-30 11:26:10','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender.',NULL,NULL,'1.000',NULL,NULL,'0'),
 ('92','Caja de vino',NULL,'Almacen','42000.00','3.00','1.00','caja',NULL,'1','2026-09-30 11:26:10','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender.',NULL,NULL,'1.000',NULL,NULL,'0'),
 ('93','Gin en botella 900 cc',NULL,'Almacen','8500.00','6.00','2.00','botella',NULL,'1','2026-09-30 11:26:10','0.00','PRECIO DE REFERENCIA. Nuestra: entra por compra de proveedor y descuenta stock al vender.',NULL,NULL,'1.000',NULL,NULL,'0'),
-('94','Pizza',NULL,'Comidas y Tragos','6500.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:26:10','0.00','PRECIO DE REFERENCIA. La hace el bar con su propio stock: nosotros solo cobramos, no descuenta nuestro stock.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('95','Balón de cerveza',NULL,'Comidas y Tragos','3000.00','0.00','0.00','balón',NULL,'1','2026-09-30 11:26:10','0.00','PRECIO DE REFERENCIA. El balon lo sirve el bar de su propio stock, que no es el nuestro. La cerveza que compramos nosotros es \"Cerveza en botella\" o \"Cerveza en lata\", y esas si descuentan.',NULL,NULL,'1.000',NULL,NULL,'1'),
-('96','Trago destornillador',NULL,'Comidas y Tragos','5200.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:26:10','0.00','PRECIO DE REFERENCIA. Mezcla de gin con tónica. El gin y la tónica son del bar: nosotros solo cobramos el trago, no descontamos stock.',NULL,NULL,'1.000',NULL,NULL,'1');
+('94','Pizza','2000000000947','Comidas y Tragos','6500.00','0.00','0.00','porción',NULL,'1','2026-09-30 11:26:10','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('95','Balón de cerveza','2000000000954','Comidas y Tragos','3000.00','0.00','0.00','balón',NULL,'1','2026-09-30 11:26:10','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('96','Trago destornillador','2000000000961','Comidas y Tragos','5200.00','0.00','0.00','vaso',NULL,'1','2026-09-30 11:26:10','0.00','Código interno de cocina, prefijo 20.',NULL,NULL,'1.000',NULL,NULL,'1'),
+('97','Bizcocho Salado Don Satur 200 g','7795735000328','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('98','Pasta de Maní Natural Maní King 485 g','7798151952332','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('99','Yogur natural sin azúcar agregada Tregar 280 gramos','7793913013993','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('100','Pan Blanco LACTAL Lactal 315','7793890258769','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('101','Yogurisimo sabor Natural La Serenísima 300 g','7791337006355','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('102','9 de Oro clásicos Molino Cañuelas 200 g','7792200000159','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('103','Leche Protein La Serenísima 1 l','7790742358608','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('104','Polenta instantánea Arcor 490 g','7790580138738','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('105','Finlandia light La Serenísima 290 g','7790742373304','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('106','Mayonesa Clásica Rica y Cremosa Hellmann\'s 475 gr','7794000006072','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('107','Dulce de leche estilo colonial La Serenísima 400 g','7790742625205','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('108','Leche Zero Lactosa La Serenísima 1 l','7790742333605','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('109','Criollitas x3 Bagley 300 gr','7790040377806','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('110','Agua eco de los andes 500 ml','7792799000011','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('111','Yerba Unión 500 g','7790387014624','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:52','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('112','Azúcar Clásica Ledesma 1 kg','7792540260138','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:53','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('113','Finlandia + Liv La Serenísima 290 g','7790742324108','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:53','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('114','Chocolinas Original Bagley 250 gr','7790040143234','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:53','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('115','Pan Blanco LACTAL familiar 460','7793890258752','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:53','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('116','Yogurisimo Griego Natural La Serenísima 300 g','7791337010017','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:53','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0'),
+('117','Coca Cola Original 2,25 L','7790895000997','Almacen','0.00','0.00','0.00','pieza',NULL,'1','2026-09-30 16:08:53','0.00',NULL,NULL,NULL,'1.000',NULL,NULL,'0');
 
 -- ---------------------------------------------------------
 -- Tabla: productos_formatos
@@ -429,7 +468,7 @@ CREATE TABLE `usuarios` (
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `usuarios` VALUES
-('1','admin','Administrador','$2y$10$x67bznHSHLvd2t83/cDwbuUEh/PiU6OIgnc2JcrrmChdGdP8ey5je','admin','1','0','2026-09-29 13:39:59','2026-09-30 14:21:00');
+('1','admin','Administrador','$2y$10$FXEQq5k9oH8A8TaYMni.MueTLqhzZTiv7EPfu9VRjzV3LWDTK0eU6','admin','1','0','2026-09-29 13:39:59','2026-09-30 16:08:52');
 
 -- ---------------------------------------------------------
 -- Tabla: venta_items
@@ -509,4 +548,4 @@ INSERT INTO `zonas` VALUES
 ('3','Barrio Sur','800.00','1','3');
 
 SET FOREIGN_KEY_CHECKS = 1;
--- Total de registros respaldados: 132
+-- Total de registros respaldados: 171

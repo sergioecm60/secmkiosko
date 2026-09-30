@@ -118,6 +118,73 @@ async function cargarAjustesCocina() {
      las dos antes de seguir y esta funcion ya no depende de ahi, pero
      igual pide lo que necesita: una funcion que dibuja una tabla tiene
      que traer sus propios datos, no confiar en que otro los dejo listos. */
+  await cargarCategorias();
+}
+
+// --- Hoja de codigos de barras ----------------------------------------------
+/* Los productos de cocina no llevan etiqueta, asi que no tienen EAN-13 de
+   fabrica. Se les genera uno con prefijo 20 (el que GS1 reserva para uso
+   interno) y se imprime una hoja para pegarla junto a la caja: con eso el
+   cajero dispara la pistola y el producto entra al tiquet sin buscarlo.
+
+   El codigo se dibuja con CSS, no con una imagen: no depende de una libreria
+   ni de una fuente externa, y sale nitido en cualquier impresora. Si el
+   codigo no cerrara el digito verificador, el dibujo no tendria el digito de
+   control que tienen los de verdad, asi que se valida antes de imprimir. */
+function dibujarCodigo(valor) {
+  const c = String(valor || "");
+  const ok = /^\d{13}$/.test(c) && digitoVerificador(c) === c[12];
+  if (!ok) return `<div class="bc-roto">${esc(c)}</div>`;
+  let h = '<div class="bc">';
+  for (let i = 0; i < 12; i++) {
+    h += `<i class="${Number(c[i]) % 2 === 0 ? 'e' : 'o'}"></i>`;
+  }
+  h += '<i class="f"></i><i class="f"></i>';
+  h += '</div>';
+  return h;
+}
+
+function renderHoja(hoja) {
+  const cont = $("#hoja-lista");
+  if (!cont) return;
+  if (!hoja.length) {
+    cont.innerHTML = '<p class="parrafo">Ningún producto activo tiene código todavía.</p>';
+    return;
+  }
+  const internos = hoja.filter(h => Number(h.cocina) === 1);
+  const fabrica = hoja.filter(h => Number(h.cocina) !== 1);
+
+  const etiqueta = (h) => `
+    <div class="etiqueta">
+      <div class="et-nombre">${esc(h.nombre)}</div>
+      ${dibujarCodigo(h.codigo)}
+      <div class="et-num">${esc(h.codigo)}</div>
+      <div class="et-precio">${dinero(h.precio)} <span>/ ${esc(h.unidad || 'pieza')}</span></div>
+    </div>`;
+
+  cont.innerHTML =
+    (internos.length ? `<h4 class="hoja-tit">Internos · prefijo 20 · cocina</h4>
+      <div class="hoja-grid">${internos.map(etiqueta).join('')}</div>` : '') +
+    (fabrica.length ? `<h4 class="hoja-tit">De fábrica · prefijo 779</h4>
+      <div class="hoja-grid">${fabrica.map(etiqueta).join('')}</div>` : '');
+}
+
+async function abrirHoja() {
+  const r = await api("codigos_cocina_generar");
+  renderHoja(r.hoja || []);
+  abrirModal("#m-hoja");
+  if (r.generados) aviso(`Se generaron ${r.generados} código(s) interno(s).`);
+  else if (r.ya_tenian) aviso("Todos los productos de cocina ya tienen código.");
+  if (r.omitidos && r.omitidos.length) {
+    aviso(`${r.omitidos.length} producto(s) de cocina ya traían un código propio y no se tocaron.`, "aviso-w");
+  }
+}
+
+async function imprimirHoja() {
+  document.body.classList.add("imprimiendo-hoja");
+  await new Promise(r => setTimeout(r, 60));
+  window.print();
+  document.body.classList.remove("imprimiendo-hoja");
 }
 
 // --- Categorias -------------------------------------------------------------

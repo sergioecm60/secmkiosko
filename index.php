@@ -430,6 +430,13 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
               Son las fichas que se ven arriba en <b>Vender</b>. Sólo el administrador las
               crea y las cambia. Al renombrar una, los productos que la tenían la siguen.
             </p>
+            <p class="parrafo" style="margin:9px 0 0">
+              Los productos de <b>cocina</b> no llevan etiqueta de fábrica, así que no tienen
+              código de barras. Con el botón les generás uno propio y imprimís la hoja para
+              pegarla junto a la caja: el cajero dispara la pistola y el producto entra
+              solo, sin buscarlo.
+            </p>
+            <button class="btn sm" id="btn-hoja" style="margin-top:10px">🏷 Hoja de códigos de barras</button>
           </div>
           <div class="envoltura" style="box-shadow:none;border:0;border-radius:0; max-height:240px; overflow:auto">
             <table class="tabla">
@@ -645,7 +652,7 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
     <div class="modal-cab"><h2 id="ct-titulo">Nueva categoría</h2><button class="cerrar" data-cerrar>✕</button></div>
     <div class="modal-cue">
           <div class="campo"><label>Nombre de la categoría</label>
-        <input id="ct-nombre" placeholder="Bebidas, Botanas…" maxlength="60" autocomplete="off"></div>
+        <input id="ct-nombre" placeholder="Panadería, Lácteos, Limpieza…" maxlength="60" autocomplete="off"></div>
       <label class="check" style="display:flex;align-items:center;gap:9px;margin-top:12px;cursor:pointer">
         <input type="checkbox" id="ct-cocina" style="width:auto;margin:0">
         <span>Los productos de esta categoría van a <b>cocina</b></span>
@@ -660,6 +667,32 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
     <div class="modal-pie">
       <button class="btn" data-cerrar>Cancelar</button>
       <button class="btn pri" id="ct-guardar">Guardar categoría</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL HOJA DE CÓDIGOS ================= -->
+<div class="velo" id="m-hoja">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-cab">
+      <h2>Hoja de códigos de barras</h2>
+      <button class="cerrar" data-cerrar>✕</button>
+    </div>
+    <div class="modal-cue">
+      <p class="parrafo" style="margin:0 0 12px">
+        Una etiqueta por producto, con su código y su precio. Los que aparecen
+        con <b>prefijo 20</b> son internos: los productos de cocina no llevan
+        etiqueta de fábrica, así que el número se lo asignamos nosotros.
+        Los que empiezan con <b>779</b> son los de fábrica y no se tocan.
+      </p>
+      <div class="acciones" style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn pri" id="hoja-generar">Generar los que falten</button>
+        <button class="btn" id="hoja-imprimir">Imprimir</button>
+      </div>
+      <div id="hoja-lista" class="hoja-lista"></div>
+    </div>
+    <div class="modal-pie">
+      <button class="btn" data-cerrar>Cerrar</button>
     </div>
   </div>
 </div>

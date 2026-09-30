@@ -21,18 +21,43 @@ function conectar() {
   const buscar = $("#txt-buscar");
   buscar.addEventListener("input", () => { estado.busqueda = buscar.value; renderGrid(); });
 
-  buscar.addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const lista = Coincidencias(buscar.value).filter(p => !estado.filtroCat || p.categoria === estado.filtroCat);
-      if (!lista.length) { aviso("Ningún producto coincide con «" + buscar.value.trim() + "».", "aviso-w"); return; }
-      if (lista.length === 1 || norm(lista[0].codigo) === norm(buscar.value.trim())) {
-        agregar(lista[0].id, 1);
-      } else {
-        aviso(lista.length + " productos coinciden. Toca el correcto en la rejilla.", "aviso-w");
+    buscar.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const texto = buscar.value.trim();
+        if (!texto) return;
+
+        /* La pistola de codigos se comporta como un teclado: escribe el numero
+           completo y manda Enter. Eso llega aqui como cualquier otra busqueda,
+           asi que lo que hay que hacer es notar cuando fue un escaneo y no una
+           busqueda a mano.
+
+           No se distingue por velocidad: elENTER tambien lo manda el cajero
+           escribiendo. La diferencia real es que un escaneo trae 8 o 13 digitos
+           y no hay forma de que alguien haya tipeado eso a mano para buscar por
+           nombre. Si el codigo existe, se agrega y se limpia el campo; si el
+           numero no esta en la base, se avisa y se deja el texto, porque capaz
+           el cajero escaneo mal y necesita ver que se le ingreso. */
+        const escaneado = (productoPorCodigo(texto) !== null);
+        const lista = escaneado
+          ? [productoPorCodigo(texto)]
+          : Coincidencias(texto).filter(p => !estado.filtroCat || p.categoria === estado.filtroCat);
+
+        if (!lista.length) {
+          aviso("Ningún producto tiene el código " + texto + ".", "aviso-w");
+          return;
+        }
+        if (lista.length === 1 || escaneado) {
+          agregar(lista[0].id, 1);
+          buscar.value = "";
+          estado.busqueda = "";
+          renderGrid();
+          buscar.focus();
+        } else {
+          aviso(lista.length + " productos coinciden. Toca el correcto en la rejilla.", "aviso-w");
+        }
       }
-    }
-  });
+    });
 
   $("#btn-limpiar-busca").addEventListener("click", () => {
     buscar.value = ""; estado.busqueda = ""; renderGrid(); buscar.focus();
@@ -131,8 +156,13 @@ function conectar() {
   /* Los eventos de zonas se fueron con el alta de Ajustes. El reparto esta
      deshabilitado; ver la nota en cargarAjustesCocina (js/16_usuarios.js). */
 
-  /* --- categorias --- */
-  escuchar("#btn-cat-nuevo", "click", () => abrirCategoria(0));
+    /* --- hoja de codigos --- */
+    escuchar("#btn-hoja", "click", () => abrirHoja().catch(() => {}));
+    escuchar("#hoja-generar", "click", () => abrirHoja().catch(() => {}));
+    escuchar("#hoja-imprimir", "click", () => imprimirHoja());
+
+    /* --- categorias --- */
+    escuchar("#btn-cat-nuevo", "click", () => abrirCategoria(0));
   escuchar("#ct-guardar", "click", guardarCategoria);
   escuchar("#a-cat-tb", "click", e => {
     const ed = e.target.closest("[data-edit-cat]");

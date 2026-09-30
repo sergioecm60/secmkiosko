@@ -2,6 +2,22 @@
 
 /*   5. PUNTO DE VENTA
    ===================================================================== */
+/**
+ * Busca un producto por codigo de barras exacto, sin passar por el buscador.
+ *
+ * Va aparte de Coincidencias() a proposito: esa ordena por relevancia de texto
+ * y un prefijo de codigo tambien coincide con varios. El escaneo tiene que
+ * ser exacto o no es un escaneo, asi que compara el codigo entero.
+ *
+ * Un codigo interno de cocina tambien es un EAN-13 de 13 digitos, asi que
+ * entra por el mismo lado que uno de fábrica sin tratamento especial.
+ */
+function productoPorCodigo(codigo) {
+  const c = norm(codigo).trim();
+  if (!c) return null;
+  return estado.productos.find(p => p.codigo && norm(p.codigo) === c) || null;
+}
+
 function Coincidencias(texto) {
   const q = norm(texto).trim();
   const base = estado.productos.filter(p => p.activo !== false);

@@ -87,34 +87,40 @@ try {
             paso('Productos de ejemplo omitidos: ya hay ' . $total . ' producto(s).');
         } else {
             // nombre, codigo, categoria, precio, costo, stock, minimo, unidad
+            //
+            // Todo lo que no sea de cocina va a "Almacen". El mostrador arranca
+            // con una sola area a proposito: con tres fichas el cajero ya tiene
+            // que buscar en el filtro, y ahi se le escapan cosas. El que quiera
+            // afinar despues (Panaderia, Lacteos, Limpieza) crea la categoria en
+            // Ajustes y le mueve los productos: para eso existe el boton.
             $demo = [
-                ['Agua mineral 600 ml',        '7501234567890', 'Bebidas',    12.00,  7.10,  48, 12, 'botella'],
-                ['Gaseosa de cola 600 ml',    '7501234567891', 'Bebidas',    18.00, 10.80,  36, 12, 'botella'],
-                ['Jugo de naranja 1 L',        '7501234567892', 'Bebidas',    26.00, 16.40,  18,  6, 'botella'],
-                ['Cerveza lata 355 ml',        '7501234567893', 'Bebidas',    28.00, 18.90,  24,  6, 'lata'],
-                ['Leche entera 1 L',           '7501234567894', 'Lácteos',    24.00, 15.20,  20,  8, 'botella'],
-                ['Yogur natural 500 g',        '7501234567895', 'Lácteos',    28.00, 17.60,  14,  6, 'pieza'],
-                ['Queso fresco 200 g',        '7501234567896', 'Lácteos',    46.00, 30.20,   9,  4, 'pieza'],
-                ['Huevos blancos (kg)',        '7501234567897', 'Abarrotes',  48.00, 33.50,  15,  5, 'kg'],
-                ['Pan de molde',              '7501234567898', 'Panadería',  34.00, 20.10,  11,  5, 'pieza'],
-                ['Galletas de avena x12',      '7501234567899', 'Botanas',    38.00, 24.70,  22,  8, 'paquete'],
-                ['Chocolate en barra',         '7501234567900', 'Botanas',    16.00,  9.40,  40, 12, 'pieza'],
-                ['Café soluble 250 g',         '7501234567901', 'Despensa',   78.00, 55.30,   8,  4, 'paquete'],
-                ['Cereal de maíz 500 g',       '7501234567902', 'Despensa',   52.00, 36.80,  10,  4, 'paquete'],
-                ['Aceite vegetal 1 L',         '7501234567903', 'Despensa',   44.00, 31.60,  12,  6, 'botella'],
-                ['Arroz grano largo 1 kg',     '7501234567904', 'Despensa',   32.00, 22.40,  25, 10, 'paquete'],
-                ['Poroto negro 500 g',        '7501234567905', 'Despensa',   28.00, 19.60,  18,  8, 'paquete'],
-                ['Azúcar 1 kg',                '7501234567906', 'Despensa',   30.00, 21.10,  20,  8, 'paquete'],
-                ['Fideos spaghetti 500 g',     '7501234567907', 'Despensa',   26.00, 17.90,  16,  8, 'paquete'],
-                ['Detergente líquido 1 L',     '7501234567908', 'Limpieza',   68.00, 50.40,   7,  4, 'botella'],
-                ['Jabón de platos 500 ml',   '7501234567909', 'Limpieza',   36.00, 24.20,  11,  5, 'botella'],
-                ['Papel higiénico x4',         '7501234567910', 'Higiene',    58.00, 42.30,  14,  6, 'paquete'],
-                ['Servilletas x100',           '7501234567911', 'Higiene',    22.00, 14.10,  20,  8, 'paquete'],
-                ['Bolsas para basura x20',     '7501234567912', 'Higiene',    28.00, 18.90,  13,  6, 'paquete'],
-                ['Pilas alcalinas x4',         '7501234567913', 'Varios',     45.00, 31.80,   6,  4, 'paquete'],
-                ['Manteca 200 g',              '7501234567914', 'Lácteos',    32.00, 21.60,  14,  6, 'pieza'],
-                ['Harina 000 x1 kg',           '7501234567915', 'Panadería',  30.00, 19.40,  18,  8, 'paquete'],
-                ['Afre instantáneo 500 g',     '7501234567916', 'Despensa',   68.00, 48.90,   6,  3, 'paquete'],
+                ['Agua mineral 600 ml',        '7501234567890', 'Almacen',    12.00,  7.10,  48, 12, 'botella'],
+                ['Gaseosa de cola 600 ml',    '7501234567891', 'Almacen',    18.00, 10.80,  36, 12, 'botella'],
+                ['Jugo de naranja 1 L',        '7501234567892', 'Almacen',    26.00, 16.40,  18,  6, 'botella'],
+                ['Cerveza lata 355 ml',        '7501234567893', 'Almacen',    28.00, 18.90,  24,  6, 'lata'],
+                ['Leche entera 1 L',           '7501234567894', 'Almacen',    24.00, 15.20,  20,  8, 'botella'],
+                ['Yogur natural 500 g',        '7501234567895', 'Almacen',    28.00, 17.60,  14,  6, 'pieza'],
+                ['Queso fresco 200 g',        '7501234567896', 'Almacen',    46.00, 30.20,   9,  4, 'pieza'],
+                ['Huevos blancos (kg)',        '7501234567897', 'Almacen',    48.00, 33.50,  15,  5, 'kg'],
+                ['Pan de molde',              '7501234567898', 'Almacen',    34.00, 20.10,  11,  5, 'pieza'],
+                ['Galletas de avena x12',      '7501234567899', 'Almacen',    38.00, 24.70,  22,  8, 'paquete'],
+                ['Chocolate en barra',         '7501234567900', 'Almacen',    16.00,  9.40,  40, 12, 'pieza'],
+                ['Café soluble 250 g',         '7501234567901', 'Almacen',    78.00, 55.30,   8,  4, 'paquete'],
+                ['Cereal de maíz 500 g',       '7501234567902', 'Almacen',    52.00, 36.80,  10,  4, 'paquete'],
+                ['Aceite vegetal 1 L',         '7501234567903', 'Almacen',    44.00, 31.60,  12,  6, 'botella'],
+                ['Arroz grano largo 1 kg',     '7501234567904', 'Almacen',    32.00, 22.40,  25, 10, 'paquete'],
+                ['Poroto negro 500 g',        '7501234567905', 'Almacen',    28.00, 19.60,  18,  8, 'paquete'],
+                ['Azúcar 1 kg',                '7501234567906', 'Almacen',    30.00, 21.10,  20,  8, 'paquete'],
+                ['Fideos spaghetti 500 g',     '7501234567907', 'Almacen',    26.00, 17.90,  16,  8, 'paquete'],
+                ['Detergente líquido 1 L',     '7501234567908', 'Almacen',    68.00, 50.40,   7,  4, 'botella'],
+                ['Jabón de platos 500 ml',   '7501234567909', 'Almacen',    36.00, 24.20,  11,  5, 'botella'],
+                ['Papel higiénico x4',         '7501234567910', 'Almacen',    58.00, 42.30,  14,  6, 'paquete'],
+                ['Servilletas x100',           '7501234567911', 'Almacen',    22.00, 14.10,  20,  8, 'paquete'],
+                ['Bolsas para basura x20',     '7501234567912', 'Almacen',    28.00, 18.90,  13,  6, 'paquete'],
+                ['Pilas alcalinas x4',         '7501234567913', 'Almacen',    45.00, 31.80,   6,  4, 'paquete'],
+                ['Manteca 200 g',              '7501234567914', 'Almacen',    32.00, 21.60,  14,  6, 'pieza'],
+                ['Harina 000 x1 kg',           '7501234567915', 'Almacen',    30.00, 19.40,  18,  8, 'paquete'],
+                ['Afre instantáneo 500 g',     '7501234567916', 'Almacen',    68.00, 48.90,   6,  3, 'paquete'],
             ];
             $st = $pdo->prepare(
                 'INSERT INTO `productos` (`nombre`,`codigo`,`categoria`,`precio`,`costo`,`stock`,`minimo`,`unidad`,`activo`)

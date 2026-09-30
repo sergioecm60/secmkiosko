@@ -3,7 +3,7 @@
 Estado del proyecto, decisiones tomadas y qué falta. Acá vive el detalle técnico; el
 [`README.md`](../README.md) sólo dice qué es y cómo se levanta.
 
-**Última actualización:** 2026-09-29
+**Última actualización:** 2026-09-30
 
 ---
 
@@ -302,13 +302,13 @@ Estas son las cosas que costaron encontrar bugs. Si se tocan, hay que volver a p
 9. **Probar siempre contra el mismo host** que el de la sesión.
 10. **El modal abierto se marca con la clase `on`**, nunca con `abierto`.
 11. **El arranque espera los datos antes de pintar.** Dos peticiones sin `await` se
-    resuelven en orden de red, y ese orden no está garantizado: el que sepaina primero
+    resuelven en orden de red, y ese orden no está garantizado: el que se pinta primero
     compila contra un estado todavía vacío y la tabla sale en blanco **sin que nada
     falle visiblemente**. Por eso `21_arranque.js` espera zonas y categorías antes de
     llamar a `cargarAjustesCocina()`. Ya pasó una vez: la tabla de categorías de Ajustes
     salía vacía porque un `await api("zonas")` sin relación estaba sosteniendo el arranque
     por casualidad. Si alguna vez hay que soltar una de esas dos, tiene que ser porque
-    ya no la necesita nadie al pintar, no por forgotten el `await`.
+    ya no la necesita nadie al pintar, no por olvidar el `await`.
 12. **Una función que dibuja una tabla trae sus propios datos.** No confiar en que otro
     los dejó listos. Por eso `cargarAjustesCocina()` pide las categorías aunque el arranque
     ya las haya cargado: así depende de sus datos y no del orden de arranque.
@@ -318,6 +318,19 @@ Estas son las cosas que costaron encontrar bugs. Si se tocan, hay que volver a p
     siembra una vacía y marcada, como hace con `Venta libre`. Esto se rompió porque el
     catálogo se había cargado a mano en una base y no en la instalación: el código andaba
     en una máquina y no en la otra, y el síntoma no señalaba al dato.
+14. **Son tres áreas y no más.** `Almacen` (mostrador), `Comidas y Tragos` (`cocina = 1`)
+    y `Venta libre` (alta manual de lo que no está en el catálogo). Se fundieron `Bebidas`,
+    `Botanas` y `Despensa` dentro de `Almacen` con las 8 fichas que tenían. La razón es de
+    uso, no de gusto: con seis fichas el cajero tiene que elegir filtro antes de cada
+    venta y ahí se le escapan cosas. **Individualizar después es lo previsto**: crear la
+    categoría en Ajustes y mover los productos desde la ficha es un botón, no una
+    migración. No volver a sembrar categorías de ejemplo en el instalador.
+15. **El código interno se reconoce por el prefijo, no por el largo.** Una generación
+    anterior dejó los 13 códigos de cocina con 12 dígitos: la base del prefijo `20` estaba
+    un dígito corta. El detector exigía 13, así que tomaba esos 12 por códigos de fábrica y
+    los saltaba como `omitidos`, con lo cual la reparación nunca se aplicaba sola. La regla
+    de detección se cambió a "prefijo `20`" y una corrida posterior los corrigió: los 13
+    códigos de cocina son EAN-13 válidos, únicos y distintos de los de fábrica.
 
 ---
 

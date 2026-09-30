@@ -1057,6 +1057,50 @@ body.ocuro .com-tipo.mesa{background:#33164d; color:#d8b4fe}
   #ticket-caja .lin, #ticket-caja .mp{ page-break-inside:avoid; break-inside:avoid }
   /* repetir el encabezado de la tabla si el ticket se parte */
   #ticket thead, #ticket-comanda thead{ display:table-header-group }
-  /* en ticket no tiene sentido mostrar el fondo gris de la app */
-  #ticket, #ticket-comanda, #ticket-caja{ box-shadow:none !important; border:0 !important }
-}
+    /* en ticket no tiene sentido mostrar el fondo gris de la app */
+    #ticket, #ticket-comanda, #ticket-caja{ box-shadow:none !important; border:0 !important }
+  }
+
+  /* ---- Hoja de codigos de barras -------------------------------------------
+     Las barras se dibujan con CSS y no con una imagen: sin libreria, sin fuente
+     externa y sin que el navegador pngifique nada. El patron es el de un EAN-13
+     real -- tres barras de arranque, las 12 del cuerpo y las dos de cierre --
+     pero sin los digitos laterales, que no hacen falta para escanear.
+
+     Al imprimir solo sale la hoja. Se esconde todo lo demas con display:none en
+     vez de opacity, porque si el modal queda invisible pero occupying espacio el
+     navegador igual reserva una hoja en blanco por cada bloque. */
+  .hoja-lista{max-height:56vh;overflow:auto}
+  .hoja-tit{font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin:14px 0 9px}
+  .hoja-tit:first-child{margin-top:0}
+  .hoja-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+
+  .etiqueta{border:1px solid var(--line);border-radius:9px;padding:9px 10px 7px;text-align:center;
+            background:var(--panel2)}
+  .et-nombre{font-size:12.5px;font-weight:700;line-height:1.25;margin-bottom:5px;
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .et-num{font-family:Consolas,"Courier New",monospace;font-size:10.5px;color:var(--muted);letter-spacing:.6px}
+  .et-precio{font-size:13px;font-weight:800;margin-top:2px}
+  .et-precio span{font-weight:400;color:var(--muted);font-size:11px}
+
+  .bc{display:flex;align-items:flex-end;justify-content:center;height:44px;gap:0;margin:2px 0 3px}
+  .bc i{display:block;height:100%;background:#111}
+  /* pares (digito par) mas angostos, impares mas anchos: asi el contraste de
+     barras y espacios es parejo y la pistola no patina el borde. */
+  .bc .e{width:2px}
+  .bc .o{width:3px;margin-right:1px}
+  .bc .f{width:5px}
+  .bc-roto{font-family:Consolas,monospace;font-size:11px;color:#b91c1c;padding:12px 0}
+
+  .imprimiendo-hoja body{background:#fff}
+  .imprimiendo-hoja body > *{display:none !important}
+  .imprimiendo-hoja #m-hoja, .imprimiendo-hoja #m-hoja *{display:block !important}
+  .imprimiendo-hoja #m-hoja{position:static;background:none;padding:0}
+  .imprimiendo-hoja #m-hoja .modal{max-width:none;border:0;box-shadow:none}
+  .imprimiendo-hoja #m-hoja .modal-cab,
+  .imprimiendo-hoja #m-hoja .modal-pie,
+  .imprimiendo-hoja #m-hoja .acciones,
+  .imprimiendo-hoja #m-hoja .parrafo{display:none !important}
+  .imprimiendo-hoja .hoja-lista{max-height:none;overflow:visible}
+  .imprimiendo-hoja .hoja-grid{grid-template-columns:repeat(3,1fr);gap:6mm}
+  .imprimiendo-hoja .etiqueta{page-break-inside:avoid;break-inside:avoid;border:1px solid #999;background:#fff}

@@ -502,6 +502,7 @@ $permisos = [
     'zona_borrar'       => ROL_ADMIN,
     'categoria_guardar' => ROL_ADMIN,
     'categoria_borrar'  => ROL_ADMIN,
+    'codigos_cocina_generar' => ROL_ADMIN,
 
     // Sólo administrador
     'config_guardar'    => ROL_ADMIN,
@@ -615,7 +616,8 @@ try {
         case 'categorias':
         case 'categorias_usadas':
         case 'categoria_guardar':
-        case 'categoria_borrar': {
+        case 'categoria_borrar':
+        case 'codigos_cocina_generar': {
             require __DIR__ . '/api/rutas/categorias.php';
             break;
         }
