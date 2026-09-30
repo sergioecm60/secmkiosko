@@ -434,10 +434,63 @@ function conectar() {
     if (e.key === "Enter") { e.preventDefault(); alRapida && alRapida(true); }
   });
 
+  /* --- ayuda de teclas: la lamparita de Vender ---
+     Va antes que el resto de este bloque a proposito. El manejador general de
+     Escape, unas lineas mas abajo, agarra Escape para cerrar modales; si este
+     lo recibiera primero ya lo habria gastado en cerrar el cartelito. Este solo
+     mira si el cartelito esta fijado y, si no, no se ocupa del Escape.
+     El hover ya lo abre por CSS. El clic la deja pegada abierta, que es lo
+     que hace falta en una pantalla tactil, donde no existe pasar el mouse. */
+  const ayuda = $("#ayuda-teclas"), btnAyuda = $("#btn-ayuda-teclas");
+  if (ayuda && btnAyuda) {
+    btnAyuda.addEventListener("click", () => {
+      const fija = ayuda.classList.toggle("fija");
+      btnAyuda.setAttribute("aria-expanded", fija ? "true" : "false");
+    });
+    // Escape cierra la ayuda, como cualquier otra ventana.
+    document.addEventListener("keydown", e => {
+      if (e.key !== "Escape") return;
+      if (ayuda.classList.contains("fija")) {
+        ayuda.classList.remove("fija");
+        btnAyuda.setAttribute("aria-expanded", "false");
+      }
+    });
+    // La ayuda se cierra sola al salir de Vender: si el cajero la fijo abierta
+    // y despues va a cobrar, un cartelito flotando sobre el cobro estorba. Se
+    // escucha en la etapa de captura para no depender de si el click cae en un
+    // hijo que tenga su propio manejador y frene la propagacion.
+    const salirDeVender = () => {
+      if (estado.vista !== "vender") {
+        ayuda.classList.remove("fija");
+        btnAyuda.setAttribute("aria-expanded", "false");
+      }
+    };
+    // Las pestanas de arriba. No hace falta capturar el click: ir() ya cambia
+    // estado.vista, asi que con leerlo despues alcanza y no se pisa ningun
+    // manejador que ya exista.
+    $$("#tabs button").forEach(b => b.addEventListener("click", salirDeVender));
+  }
+
   /* --- atajos de teclado --- */
   document.addEventListener("keydown", e => {
     if (e.key === "F2") { e.preventDefault(); ir("vender"); return; }
     if (e.key === "F4") { e.preventDefault(); if (!$("#m-cobro").classList.contains("on")) abrirCobro(); return; }
+
+    /* Ctrl+P reimprime el ticket abierto. Antes la lista de atajos de Ajustes
+       lo prometia pero no existia en ningun lado: el shortcut hacia que el
+       navegador abriera su propio dialogo de impresion, que imprime la pagina
+       entera en vez del ticket. Se intercepta y se usa el mismo camino que el
+       boton Imprimir del ticket. */
+    if ((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")) {
+      // Se corta siempre, haya ticket o no: si no hay nada que reimprimir, el
+      // dialogo del navegador abria igual e imprimiria la pagina entera.
+      e.preventDefault();
+      if (!estado.ultimaVenta) { aviso("No hay ningun ticket abierto para reimprimir."); return; }
+      e.preventDefault();
+      mostrarVenta(estado.ultimaVenta, false);
+      imprimirTicket(estado.ultimaVenta);
+      return;
+    }
 
     if (e.key === "Escape") {
       const abiertas = $$(".velo.on");

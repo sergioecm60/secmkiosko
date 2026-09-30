@@ -107,6 +107,27 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
           <button class="btn sm" id="btn-rapido" title="Cargar al vuelo algo que no está en el catálogo. Se cobra con su precio y no descuenta stock.">+ Producto rápido</button>
           <button class="btn sm" id="btn-comanda" title="Anotar qué hay que preparar y sacarle el papel a la cocina. No cobra: eso va aparte, en el carrito.">🍳 Comanda de cocina</button>
           <span class="fuente">Venta espontánea: se cobra, no se controla stock</span>
+
+          <!-- La ayuda de teclas va acá y no en Ajustes: el que la necesita es
+               el cajero, y el cajero no entra nunca a Ajustes. Se despliega al
+               pasar el mouse; el clic la deja abierta para las pantallas
+               táctiles, donde no hay hover. -->
+          <div class="ayuda-teclas" id="ayuda-teclas">
+            <button class="btn sm lampara" id="btn-ayuda-teclas"
+              aria-expanded="false" aria-controls="lista-teclas"
+              title="Ver los atajos de teclado">💡</button>
+            <div class="panel-teclas" id="lista-teclas" role="tooltip">
+              <ul class="teclas-lista">
+                <li><kbd>F2</kbd> Ir a la búsqueda y enfocar para escanear</li>
+                <li><kbd>Enter</kbd> Agregar el producto buscado al ticket</li>
+                <li><kbd>F4</kbd> Cobrar la venta actual</li>
+                <li><kbd>Ctrl</kbd>+<kbd>P</kbd> Reimprimir el ticket abierto</li>
+                <li><kbd>Esc</kbd> Cerrar ventana / limpiar búsqueda</li>
+                <li><kbd>Esc</kbd> en el cobro = vaciar lo recibido</li>
+                <li class="f"><kbd>🍳</kbd> En cada línea del ticket: mandarla a cocina</li>
+              </ul>
+            </div>
+          </div>
         </div>
         <div class="chips" id="filtros"></div>
         <div class="grid" id="grid-productos"></div>
@@ -553,14 +574,11 @@ $rolTexto = ['admin' => 'Administrador', 'vendedor' => 'Vendedor', 'cocina' => '
         <div class="card">
           <div class="card-cab"><h2>Atajos de teclado</h2></div>
           <div class="card-cue">
-            <ul class="atajos">
-              <li><kbd>F2</kbd> Ir a la búsqueda / enfocar para escanear</li>
-              <li><kbd>Enter</kbd> Agregar el producto buscado al ticket</li>
-              <li><kbd>F4</kbd> Cobrar la venta actual</li>
-              <li><kbd>Esc</kbd> Cerrar ventana / limpiar búsqueda</li>
-              <li><kbd>Ctrl</kbd>+<kbd>P</kbd> Imprimir el ticket abierto</li>
-              <li><kbd>Esc</kbd> en la pantalla de cobro = anular / vaciar</li>
-            </ul>
+            <p class="parrafo" style="margin-top:0">
+              La lista completa de atajos no está acá: vive en <b>Vender</b>, en el botón
+              💡 de la barra de búsqueda, porque el que la necesita es el cajero y nunca
+              entra a Ajustes.
+            </p>
           </div>
         </div>
       </div>

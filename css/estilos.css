@@ -209,7 +209,42 @@ main{flex:1; min-height:0; position:relative}
 /* min-width mas alto que 0 para que el texto no se apelmice a 33px, y
    flex-basis:auto para que los botones anchos lo empijen a la linea de
    abajo en vez de cortarlo. */
-.barra-rapida .fuente{color:var(--muted); font-size:12.5px; flex:1 1 180px; min-width:150px; overflow-wrap:anywhere}
+  .barra-rapida .fuente{color:var(--muted); font-size:12.5px; flex:1 1 180px; min-width:150px; overflow-wrap:anywhere}
+
+  /* --- Ayuda de teclas: boton lamparita que abre la lista al pasar el mouse.
+     Va en la barra de Vender y no en Ajustes porque el que la necesita es el
+     cajero, y el cajero no entra nunca a Ajustes. */
+  .ayuda-teclas{position:relative; flex:0 0 auto; margin-left:auto}
+  .ayuda-teclas .lampara{font-size:15px; line-height:1; padding:7px 10px; background:var(--panel2)}
+  /* El borde se ilumina mientras el panel esta abierto, para que se vea de
+     un vistazo que el cartelito pertenece a ese boton. */
+  .ayuda-teclas .lampara{border-color:transparent}
+  .ayuda-teclas:hover .lampara,
+  .ayuda-teclas:focus-within .lampara,
+  .ayuda-teclas.fija .lampara{border-color:var(--line2); background:var(--line)}
+
+  .panel-teclas{
+    position:absolute; z-index:60; top:calc(100% + 8px); right:0;
+    width:340px; max-width:calc(100vw - 40px);
+    padding:12px 14px;
+    background:var(--card); border:1px solid var(--line2); border-radius:10px;
+    box-shadow:0 12px 32px rgba(0,0,0,.28);
+    /* Oculto pero sin display:none: asi el cambio de opacity se anima. */
+    opacity:0; visibility:hidden; transform:translateY(-6px);
+    transition:opacity .14s ease, transform .14s ease, visibility .14s;
+  }
+  .ayuda-teclas:hover .panel-teclas,
+  .ayuda-teclas:focus-within .panel-teclas,
+  .ayuda-teclas.fija .panel-teclas{opacity:1; visibility:visible; transform:none}
+  .teclas-lista{margin:0; padding:0; list-style:none; font-size:13.5px; color:var(--muted); line-height:1.5}
+  .teclas-lista li{display:flex; gap:8px; align-items:baseline; padding:3px 0}
+  .teclas-lista li + li{border-top:1px solid var(--line)}
+  /* kbd es inline-block con padding, asi que sin esto el texto de al lado se
+     pega contra la tecla. */
+  .teclas-lista kbd{flex:0 0 auto; white-space:nowrap}
+  .teclas-lista .f{color:var(--ink)}
+  /* En pantallas sin hover el panel queda siempre abierto si el usuario lo
+     dejo fijado con un toque; el clic tambien lo alterna a mano. */
 
 /* Carrito */
 .carrito-cab{
