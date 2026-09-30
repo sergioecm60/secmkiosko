@@ -68,7 +68,7 @@ async function iniciar() {
       return;
     }
     await Promise.all([cargarProductos(), refrescarCabecera(), cargarProveedores()]);
-    if (estado.config.tema === "ocuro") document.body.classList.add("t.ocuro");
+    if (estado.config.tema === "ocuro") document.body.classList.add("ocuro");
     aplicarMarca();
     renderPOS();
     $("#txt-buscar").focus();

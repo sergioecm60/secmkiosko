@@ -12,7 +12,7 @@ function conectar() {
 
   /* --- tema --- */
   $("#btn-tema").addEventListener("click", async () => {
-    const oscuro = document.body.classList.toggle("t.ocuro");
+    const oscuro = document.body.classList.toggle("ocuro");
     const tema = oscuro ? "ocuro" : "claro";
     try { await api("config_guardar", { tema: tema }); estado.config.tema = tema; } catch (e) { /* visual only */ }
   });

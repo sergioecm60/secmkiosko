@@ -10,7 +10,7 @@
   --shadow:0 1px 2px rgba(19,30,51,.06), 0 8px 24px rgba(19,30,51,.08);
   --r:12px; --t:150ms;
 }
-body.t.ocuro{
+body.ocuro{
   --bg:#0e1420; --panel:#171f2d; --panel2:#1d2637; --ink:#e9eff9; --muted:#94a4be;
   --line:#283349; --line2:#222b3d; --brand:#3b82f6; --brand2:#1d4ed8;
   --ok:#4ade80; --okbg:#13311f; --warn:#fbbf24; --warnbg:#33280f; --bad:#f87171; --badbg:#3a1616;
@@ -204,7 +204,7 @@ main{flex:1; min-height:0; position:relative}
 .barra-rapida{
   display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   margin:0 0 10px; padding:8px 10px;
-  background:var(--card); border:1px solid var(--line); border-radius:10px;
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
 }
 /* min-width mas alto que 0 para que el texto no se apelmice a 33px, y
    flex-basis:auto para que los botones anchos lo empijen a la linea de
@@ -227,7 +227,7 @@ main{flex:1; min-height:0; position:relative}
     position:absolute; z-index:60; top:calc(100% + 8px); right:0;
     width:340px; max-width:calc(100vw - 40px);
     padding:12px 14px;
-    background:var(--card); border:1px solid var(--line2); border-radius:10px;
+    background:var(--panel); border:1px solid var(--line2); border-radius:10px;
     box-shadow:0 12px 32px rgba(0,0,0,.28);
     /* Oculto pero sin display:none: asi el cambio de opacity se anima. */
     opacity:0; visibility:hidden; transform:translateY(-6px);
@@ -800,7 +800,7 @@ kbd{
 .fmt-fila{
   display:grid;grid-template-columns:minmax(70px,1.4fr) minmax(58px,78px) minmax(68px,100px) 62px;
   gap:6px;align-items:center;
-  background:var(--soft);border:1px solid var(--linea);border-radius:9px;padding:7px 8px;
+  background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:7px 8px;
 }
 .fmt-fila:has(.fmt-margen){grid-template-columns:minmax(64px,1.3fr) minmax(54px,70px) minmax(66px,94px) minmax(60px,84px) 62px}
 /* En pantallas angostas la fila se parte en dos columnas: los inputs siguen
@@ -820,7 +820,7 @@ kbd{
 .fmt-quitar{padding:5px 7px;line-height:1}
 .fmt-vacio{
   margin:0 0 8px;padding:10px 12px;font-size:12.5px;color:var(--muted);
-  border:1px dashed var(--linea);border-radius:9px;text-align:center;
+  border:1px dashed var(--line);border-radius:9px;text-align:center;
 }
 @media(max-width:720px){
   .fmt-fila{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
@@ -854,7 +854,7 @@ kbd{
 }
 .coc-vacia{
   grid-column:1/-1; padding:52px 20px; text-align:center; color:var(--muted);
-  border:2px dashed var(--linea); border-radius:14px;
+  border:2px dashed var(--line); border-radius:14px;
 }
 .coc-vacia .ic{font-size:44px; display:block; margin-bottom:10px; opacity:.55}
 
