@@ -116,28 +116,38 @@ case 'categoria_borrar': {
 
           foreach ($filas as $f) {
               $codigo = $f['codigo'] ?? '';
-              $num = (int) preg_replace('/\D/', '', $codigo);
-              // Se reconoce como interno por el prefijo y no por el largo: si
-              // una generacion anterior dejo un codigo con la forma mal (por
-              // ejemplo 12 digitos en vez de 13), igual hay que rehacerlo en vez
-              // de tratarlo como un EAN-13 que puso el usuario.
-              $esInterno = strlen($codigo) >= 2 && str_starts_with($codigo, '20');
+              $esperado = '20' . str_pad((string) $f['id'], 10, '0', STR_PAD_LEFT);
+              $esperado .= digitoDe($esperado);
 
-              if ($esInterno) {
-                  // Ya tiene uno. Si el numero no corresponde a este producto,
-                  // es que quedo de una generacion anterior con otro criterio:
-                  // se rehace para que la hoja impresa siga siendo valida.
-                  $esperado = '20' . str_pad((string) $f['id'], 10, '0', STR_PAD_LEFT);
-                  $esperado .= digitoDe($esperado);
-                  if ($codigo === $esperado) { $yaInternos++; continue; }
-              } elseif ($codigo !== '') {
-                  // EAN-13 de fabrica o un codigo que puso el usuario: no se toca.
+              if ($codigo === $esperado) { $yaInternos++; continue; }
+              if ($codigo !== '') {
+                  // Cualquier otro codigo se deja como esta. Ojo con el que
+                  // parece interno solo por el prefijo: GS1 si emite EAN-13 de
+                  // circulacion restringida que arrancan con 20 (020-029 y
+                  // 200-299), asi que el prefijo NO prueba que sea nuestro.
+                  // Nuestro es solo el que lleva adentro el id de este
+                  // producto, y eso ya se comparo arriba con $esperado. Antes
+                  // se clasificaba solo por el prefijo y eso terminaba pisando
+                  // en silencio un EAN de verdad: el codigo anterior se perdia
+                  // sin dejar rastro. Un 20 que no es el esperado va a
+                  // $omitidos, que se muestra, para que lo revise el usuario.
                   $omitidos[] = ['id' => (int) $f['id'], 'nombre' => $f['nombre'], 'codigo' => $codigo];
                   continue;
               }
 
               $base = '20' . str_pad((string) $f['id'], 10, '0', STR_PAD_LEFT);
               $nuevo = $base . digitoDe($base);
+
+              // Red de seguridad: si otro producto ya tiene este codigo (pasa
+              // si el catalogo se importo de otra parte) se saltea en vez de
+              // dejar dos productos con el mismo codigo, que en el POS es
+              // indistinguible y cobra el que toque.
+              $stCh = $bd->prepare('SELECT id FROM productos WHERE codigo = ? AND id <> ? LIMIT 1');
+              $stCh->execute([$nuevo, (int) $f['id']]);
+              if ($stCh->fetchColumn() !== false) {
+                  $omitidos[] = ['id' => (int) $f['id'], 'nombre' => $f['nombre'], 'codigo' => $nuevo];
+                  continue;
+              }
 
               $obs = trim(($f['observaciones'] ?? ''));
               $marca = 'Código interno de cocina, prefijo 20.';
